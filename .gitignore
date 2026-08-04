@@ -1,0 +1,36 @@
+# ========================
+# CCS / Eclipse files
+# ========================
+.metadata/
+.settings/
+.launches/
+
+# ========================
+# IDE / Theia / Browser junk
+# ========================
+.theia/
+.jxbrowser.userdata/
+.prompts/
+
+# ========================
+# Build outputs
+# ========================
+Debug/
+Release/
+*.out
+*.obj
+*.d
+
+# ========================
+# Temp / system
+# ========================
+RemoteSystemsTempFiles/
+*.tmp
+*.bak
+
+# ========================
+# Optional (team choice)
+# ========================
+# Uncomment if conflicts happen
+# .cproject
+# .project
