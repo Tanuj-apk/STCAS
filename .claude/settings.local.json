@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//C/ti/ccs2050/ccs/theia/resources/ai/**)"
-    ],
-    "ask": []
-  }
-}
