@@ -384,8 +384,10 @@ void v_1sTasks(void)
     if(count >= 10)
     {
         gsm_start_request(GSM_1);
+        radio_send_aap(RADIO_ID_1);
         radio_send_arp(RADIO_ID_1);
-        radio_send_orp(RADIO_ID_1);
+        radio_send_reg_type1(RADIO_ID_1);
+        radio_send_reg_type2(RADIO_ID_1);
         count = 0;
     }
      */
