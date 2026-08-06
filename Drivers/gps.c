@@ -33,6 +33,8 @@ volatile uint32_t seconds_uptime       = 0;
 volatile uint32_t gps1_last_ok_sec     = 0;
 volatile uint32_t gps2_last_ok_sec     = 0;
 
+volatile bool incremental_test_failed = 0;
+
 /* No-frame timeout for each GPS (testing value; later 10–30 s) */
 #define GPS_FRAME_TIMEOUT_SEC   3u
 
@@ -655,16 +657,20 @@ gps_decision_t decide_gps_primary(volatile GPS_Frame_t *gps1,
         {
             if((IncTest2 > LastIncTest2) ? ((IncTest2 - LastIncTest2 > 0)) : (LastIncTest2 - IncTest2 > 0))
             {
-                //Switch to SR mode
+                fallback_active = 1;
+                seconds_in_fallback = 0;
+                incremental_test_failed = 1;
             }
             else
             {
                 //Switch to GPS2?
+                gps_select.sel = GPS_SEL_GPS2;
             }
         }
         else if((IncTest2 > LastIncTest2) ? ((IncTest2 - LastIncTest2 > 0)) : (LastIncTest2 - IncTest2 > 0))
         {
             //Switch to GPS1?
+            gps_select.sel = GPS_SEL_GPS2;
         }
     }
     //
@@ -900,6 +906,7 @@ void gps_process(void)
             fallback_active     = 0;
             seconds_in_fallback = 0;
             cpu_time_valid      = 1;
+            incremental_test_failed = 0;
 
             if (gps_select.sel == GPS_SEL_GPS1)
             {
@@ -1021,6 +1028,7 @@ void gps_process(void)
                 /* Startup condition: never had GPS time */
                 fallback_active = 0;
                 cpu_time_valid  = 0;
+                incremental_test_failed = 0;
             }
         }
 
