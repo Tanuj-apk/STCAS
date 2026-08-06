@@ -1924,585 +1924,219 @@ void radio_send_reg_type1(radio_id_t radio_id)
     radio_info_ack_tx_done();
 }
 
-uint8_t radio_parse_reg_type1(const uint8_t *p, uint16_t len, radio_reg_type1_t *out)
+static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
 {
-    if (!p || !out)
-        return 0;
+    memset(buf, 0, RADIO_MAX_PAYLOAD_LEN);
+    uint16_t bit_index = 0;
 
-    memset(out, 0, sizeof(*out));
+    /* =========================================================
+     * FRAME 0  ? payload[0–5]  ? (Spec Byte 2–7)
+     * ========================================================= */
 
-    index_var = 0;
+    uint32_t source_stn_id = g_my_stn_id;
 
-    /*Radio Header Parsing*/
-    /* PKT_TYPE (4 bits) */
-    out->radio_header_reg_type1.pkt_type = get_bits(p, index_var, 4);
+    /* PKT_TYPE : 4 bits */
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    bit_index += 4;
 
-    /* PKT_LENGTH (10 bits) */
-    out->radio_header_reg_type1.pkt_length = get_bits(p, index_var, 10);
+    /* PKT_LEN : 7 bits (filled later) */
+    uint16_t pkt_len_bit_pos = bit_index;
+    set_bits(buf, bit_index, 7, 0);
+    bit_index += 7;
 
-    /* FRAME_NUM (17 bits) */
-    out->radio_header_reg_type1.frame_num = get_bits(p, index_var, 17);
+    /* FRAME_NUM : 17 bits */
+    set_bits(buf, bit_index, 17, frame_num);
+    bit_index += 17;
 
-    /* SOURCE_STN_ID (16 bits) */
-    out->radio_header_reg_type1.source_stn_id = get_bits(p, index_var, 16);
+    /* SOURCE_STN_ID : 16 bits */
+    set_bits(buf, bit_index, 16, source_stn_id);
+    bit_index += 16;
 
-    /* SOURCE_VERSION (3 bits) */
-    out->radio_header_reg_type1.source_version = get_bits(p, index_var, 3);
+    /* =========================================================
+     * FRAME 1  ? payload[6–11]
+     * ========================================================= */
+    uint8_t source_stn_version = KAVACH_VERSION_4_0;
 
-    /* DEST_LOCO_ID (20 bits) */
-    out->radio_header_reg_type1.dest_loco_id = get_bits(p, index_var, 20);
+    /* SOURCE_LOCO_VERSION : 3 bits */
+    set_bits(buf, bit_index, 3, source_stn_version);
+    bit_index += 3;
 
+    uint32_t dest_loco_id /*= g_my_loco_id*/;
+    /* DEST_LOCO_ID : 20 bits */
+    set_bits(payload, bit_index, 20, dest_loco_id);
+    bit_index += 20;
+
+    uint8_t ref_prof_id /*= g_my_loco_id*/;
     /* REF_PROF_ID (4 bits) */
-    out->radio_header_reg_type1.ref_prof_id = get_bits(p, index_var, 4);
+    set_bits(payload, bit_index, 4, ref_prof_id);
+    bit_index += 4;
 
+    uint16_t last_ref_rfid /*= g_my_loco_id*/;
     /* LAST_REF_RFID (10 bits) */
-    out->radio_header_reg_type1.last_ref_rfid = get_bits(p, index_var, 10);
+    set_bits(payload, bit_index, 10, ref_prof_id);
+    bit_index += 10;
 
+    uint16_t dist_pkt_start /*= g_my_loco_id*/;
     /* DIST_PKT_START (15 bits) */
-    out->radio_header_reg_type1.dist_pkt_start = get_bits(p, index_var, 15);
+    set_bits(payload, bit_index, 15, ref_prof_id);
+    bit_index += 15;
 
+    uint8_t pkt_dir /*= g_my_loco_id*/;
     /* PKT_DIR (2 bits) */
-    out->radio_header_reg_type1.pkt_dir = get_bits(p, index_var, 2);
+    set_bits(payload, bit_index, 2, pkt_dir);
+    bit_index += 2;
 
-    //3 Padding bits
-    out->radio_header_reg_type1.padding_bits = get_bits(p, index_var, 3);
+    uint8_t padding_bits = 3;  // Set the bits
+    /* PADDING_BITS : X bits */
+    set_bits(buf, bit_index, padding_bits, 0);
+    bit_index += padding_bits;
 
+    uint16_t MA_pkt_start = bit_index;
     /*MA Packet Parsing*/
+    uint8_t sub_pkt_type /*= g_my_loco_id*/;
     /* SUB_PKT_TYPE (4 bits) */
-    out->MA_Packet_reg_type1.sub_pkt_type = get_bits(p, index_var, 4);
+    set_bits(payload, bit_index, 4, sub_pkt_type);
+    bit_index += 4;
 
+    uint8_t sub_pkt_len /*= g_my_loco_id*/;
     /* SUB_PKT_LEN (7 bits) */
-    out->MA_Packet_reg_type1.sub_pkt_len = get_bits(p, index_var, 7);
+    set_bits(payload, bit_index, 7, sub_pkt_len);
+    bit_index += 7;
 
+    uint8_t frame_offset /*= g_my_loco_id*/;
     /* FRAME_OFFSET (4 bits) */
-    out->MA_Packet_reg_type1.frame_offset = get_bits(p, index_var, 4);
+    set_bits(payload, bit_index, 4, frame_offset);
+    bit_index += 4;
 
+    uint8_t dest_loco_sos /*= g_my_loco_id*/;
     /* DEST_LOCO_SOS (1 + 3 = 4 bits) */
-    out->MA_Packet_reg_type1.dest_loco_sos = get_bits(p, index_var, 4);
+    set_bits(payload, bit_index, 4, dest_loco_sos);
+    bit_index += 4;
 
+    uint8_t train_section_type /*= g_my_loco_id*/;
     /* TRAIN_SECTION_TYPE (2 bits) */
-    out->MA_Packet_reg_type1.train_section_type = get_bits(p, index_var, 2);
+    set_bits(payload, bit_index, 2, train_section_type);
+    bit_index += 2;
 
+    uint32_t cur_sig_info /*= g_my_loco_id*/;
     /* ================= CUR_SIG_INFO (17 bits) ================= */
-    out->MA_Packet_reg_type1.cur_sig_info = get_bits(p, index_var, 17);
+    set_bits(payload, bit_index, 17, cur_sig_info);
+    bit_index += 17;
 
-    uint32_t sig = (reg_type1.MA_Packet_reg_type1.cur_sig_info >> 9) & 0x3F; //a14 to a9
-
-//    if(sig >= 16 && sig <= 21)
-//    {
-//        input_write.raw_flags[1] |= (1U << 26);   // Signals that don't require Standstill override
-//    }
-//    else
-//    {
-//        input_write.raw_flags[1] &= ~(1U << 26);
-//    }
-
+    uint8_t cur_sig_aspect /*= g_my_loco_id*/;
     /* CUR_SIG_ASPECT (complete 2 + 4 = 6 bits) */
-    out->MA_Packet_reg_type1.cur_sig_aspect = get_bits(p, index_var, 6);
+    set_bits(payload, bit_index, 6, cur_sig_aspect);
+    bit_index += 6;
 
+    uint8_t next_sig_aspect /*= g_my_loco_id*/;
     /* NEXT_SIG_ASPECT (4 + 2 = 6 bits) */
-    out->MA_Packet_reg_type1.next_sig_aspect = get_bits(p, index_var, 6);
+    set_bits(payload, bit_index, 6, next_sig_aspect);
+    bit_index += 6;
 
+    uint16_t appr_sig_dist /*= g_my_loco_id*/;
     /* APPR_SIG_DIST (6 + 8 + 1 = 15 bits) */
-    out->MA_Packet_reg_type1.appr_sig_dist = get_bits(p, index_var, 15);
+    set_bits(payload, bit_index, 15, next_sig_aspect);
+    bit_index += 15;
 
+    uint8_t authority_type /*= g_my_loco_id*/;
     /* AUTHORITY_TYPE (2 bits) */
-    out->MA_Packet_reg_type1.authority_type = get_bits(p, index_var, 2);
+    set_bits(payload, bit_index, 2, authority_type);
+    bit_index += 2;
 
     /* AUTHORIZED_SPEED (6 bits) */
-    if(out->MA_Packet_reg_type1.authority_type == 1)
-        out->MA_Packet_reg_type1.authorized_speed = get_bits(p, index_var, 6);
+    if(authority_type == 1)
+    {
+        uint8_t authorized_speed /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 6, authorized_speed);
+        bit_index += 6;
+    }
 
+    uint16_t ma_wrt_sig /*= g_my_loco_id*/;
     /* MA_W_R_T_SIG (16 bits) */
-    out->MA_Packet_reg_type1.ma_wrt_sig = get_bits(p, index_var, 16);
+    set_bits(payload, bit_index, 16, ma_wrt_sig);
+    bit_index += 16;
 
+    uint8_t req_shorten_ma /*= g_my_loco_id*/;
     /* REQ_SHORTEN_MA (1 bit) */
-    out->MA_Packet_reg_type1.req_shorten_ma = get_bits(p, index_var, 1);
+    set_bits(payload, bit_index, 1, req_shorten_ma);
+    bit_index += 1;
 
     /* NEW_MA (16 bits) */
-    if(out->MA_Packet_reg_type1.req_shorten_ma == 1)
-        out->MA_Packet_reg_type1.new_ma = get_bits(p, index_var, 16);
-
-    /* TRAIN_LENGTH_INFO_STS (1 bit)*/
-    out->MA_Packet_reg_type1.trn_len_info_sts = get_bits(p, index_var, 1);
-
-    if(out->MA_Packet_reg_type1.trn_len_info_sts == 1)
+    if(req_shorten_ma == 1)
     {
-        /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
-        out->MA_Packet_reg_type1.trn_len_info_type = get_bits(p, index_var, 1);
-
-        /* REF_FRAME_NUM_TLM (17 bits) */
-        out->MA_Packet_reg_type1.ref_frame_num_tlm = get_bits(p, index_var, 17);
-
-        /* REF_OFFSET_INT_TLM (8 bits) */
-        out->MA_Packet_reg_type1.ref_offset_int_tlm = get_bits(p, index_var, 8);
+        uint16_t new_ma /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 16, new_ma);
+        bit_index += 16;
     }
 
+    uint8_t trn_len_info_sts /*= g_my_loco_id*/;
+    /* TRAIN_LENGTH_INFO_STS (1 bit)*/
+    set_bits(payload, bit_index, 1, trn_len_info_sts);
+    bit_index += 1;
+
+    if(trn_len_info_sts == 1)
+    {
+        uint8_t trn_len_info_type /*= g_my_loco_id*/;
+        /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
+        set_bits(payload, bit_index, 1, trn_len_info_type);
+        bit_index += 1;
+
+        uint32_t ref_frame_num_tlm /*= g_my_loco_id*/;
+        /* REF_FRAME_NUM_TLM (17 bits) */
+        set_bits(payload, bit_index, 17, ref_frame_num_tlm);
+        bit_index += 17;
+
+        uint8_t ref_offset_int_tlm /*= g_my_loco_id*/;
+        /* REF_OFFSET_INT_TLM (8 bits) */
+        set_bits(payload, bit_index, 8, ref_offset_int_tlm);
+        bit_index += 8;
+    }
+
+    uint8_t next_stn_comm /*= g_my_loco_id*/;
     /* NEXT_STN_COMM (1 bit) */
-    out->MA_Packet_reg_type1.next_stn_comm = get_bits(p, index_var, 1);
+    set_bits(payload, bit_index, 1, next_stn_comm);
+    bit_index += 1;
+
 
     /* APPR_STN_ID (16 bits) */
-    if(out->MA_Packet_reg_type1.next_stn_comm == 1)
-        out->MA_Packet_reg_type1.appr_stn_id = get_bits(p, index_var, 16);
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->MA_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-//    if(index_var >= len)
-//    {
-//        uint8_t check_res;
-//        memset(out, 0, sizeof(*out));
-//        check_res = radio_parse_reg_type2(radio_rx_ctx.payload, radio_rx_ctx.payload_len, &reg_type2);
-//        if(check_res)
-//            return 2;
-//        else
-//            return 0;
-//    }
-
-    /*SSP Packet Parsing*/
-    /* SUB_PKT_TYPE (SSP) (4 bits) */
-    out->SSP_Packet_reg_type1.sub_pkt_type_ssp = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN (7 bits) */
-    out->SSP_Packet_reg_type1.sub_pkt_len_ssp = get_bits(p, index_var, 7);
-
-    /* LM_Speed_Info_CNT (5 bits) */
-    out->SSP_Packet_reg_type1.lm_speed_info_cnt = get_bits(p, index_var, 5);
-
-    for(uint8_t i = 0; i < out->SSP_Packet_reg_type1.lm_speed_info_cnt; i++)
+    if(next_stn_comm == 1)
     {
-        /* LM_Static_Speed_Distance (15 bits) */
-        out->SSP_Packet_reg_type1.lm_static_speed_dist[i] = get_bits(p, index_var, 15);
-
-        /* LM_Static_Speed_Class (1 bit) */
-        out->SSP_Packet_reg_type1.lm_static_speed_class[i] = get_bits(p, index_var, 1);
-
-        /* ================= SPEED VALUES ================= */
-        if(out->SSP_Packet_reg_type1.lm_static_speed_class[i] == 0)
-        {
-            /* Universal Speed (6 bits) */
-            out->SSP_Packet_reg_type1.lm_speed_universal[i] = get_bits(p, index_var, 6);
-        }
-        else if(out->SSP_Packet_reg_type1.lm_static_speed_class[i] == 1)
-        {
-            /* Class A (6 bits) */
-            out->SSP_Packet_reg_type1.lm_speed_class_a[i] = get_bits(p, index_var, 6);
-
-            /* Class B (6 bits) */
-            out->SSP_Packet_reg_type1.lm_speed_class_b[i] = get_bits(p, index_var, 6);
-
-            /* Class C (6 bits) */
-            out->SSP_Packet_reg_type1.lm_speed_class_c[i] = get_bits(p, index_var, 6);
-        }
+        uint16_t appr_stn_id /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 16, appr_stn_id);
+        bit_index += 16;
     }
 
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->SSP_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*GP Packet Parsing*/
-    /* SUB_PKT_TYPE (GRAD) (4 bits)*/
-    out->GP_Packet_reg_type1.sub_pkt_type_grad = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_GRAD (7 bits) */
-    out->GP_Packet_reg_type1.sub_pkt_len_grad = get_bits(p, index_var, 7);
-
-    /* LM_Grad_Info_CNT (5 bits) */
-    out->GP_Packet_reg_type1.lm_grad_info_cnt = get_bits(p, index_var, 5);
-
-    for(uint8_t i = 0; i < out->GP_Packet_reg_type1.lm_grad_info_cnt; i++)
+    if((bit_index - MA_pkt_start) % 8)
     {
-        /* LM_Gradient_Distance (15 bits) */
-        out->GP_Packet_reg_type1.lm_gradient_distance[i] = get_bits(p, index_var, 15);
-
-        /* LM_GDIR (1 bit) */
-        out->GP_Packet_reg_type1.lm_gdir[i] = get_bits(p, index_var, 1);
-
-        /* LM_GRADIENT_VALUE (5 bits) */
-        out->GP_Packet_reg_type1.lm_gradient_value[i] = get_bits(p, index_var, 5);
+        uint8_t padding_bits = 8 - ((bit_index - MA_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
     }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->GP_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*LCGP Packet Parsing*/
-    /* SUB_PKT_TYPE (LC) (4 bits)*/
-    out->LCGP_Packet_reg_type1.sub_pkt_type_lc = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_LC (7 bits) */
-    out->LCGP_Packet_reg_type1.sub_pkt_len_lc = get_bits(p, index_var, 7);
-
-    /* LM_LC_Info_CNT (5 bits) */
-    out->LCGP_Packet_reg_type1.lm_lc_info_cnt = get_bits(p, index_var, 5);
-
-    for(uint8_t i = 0; i < out->LCGP_Packet_reg_type1.lm_lc_info_cnt; i++)
-    {
-        /* LM_LC_Distance (15 bits) */
-        out->LCGP_Packet_reg_type1.lm_lc_distance[i] = get_bits(p, index_var, 15);
-
-        /* LM_LC_ID_Numeric (10 bits) */
-        out->LCGP_Packet_reg_type1.lm_lc_id_numeric[i] = get_bits(p, index_var, 10);
-
-        /* Alpha suffix (3 bits) */
-        out->LCGP_Packet_reg_type1.lm_lc_id_alpha_suffix[i] = get_bits(p, index_var, 3);
-
-        /* Manning type (1 bit)*/
-        out->LCGP_Packet_reg_type1.lm_lc_manning_type[i] = get_bits(p, index_var, 1);
-
-        /* LC class (3 bits)*/
-        out->LCGP_Packet_reg_type1.lm_lc_class[i] = get_bits(p, index_var, 3);
-
-        /* LM LC Auto whistle Enabled (1 bit)*/
-        out->LCGP_Packet_reg_type1.lm_lc_auto_whistle_en[i] = get_bits(p, index_var, 1);
-
-        if(out->LCGP_Packet_reg_type1.lm_lc_auto_whistle_en[i] == 1)
-        {
-            /* LM LC Auto whistle Type(2 bit)*/
-            out->LCGP_Packet_reg_type1.lm_lc_auto_whistle_type[i] = get_bits(p, index_var, 2);
-        }
-    }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->LCGP_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*TSP Packet Parsing*/
-    /* SUB_PKT_TYPE (TSP) (4 bits)*/
-    out->TSP_Packet_reg_type1.sub_pkt_type_tsp = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_TSP (7 bits) */
-    out->TSP_Packet_reg_type1.sub_pkt_len_tsp = get_bits(p, index_var, 7);
-
-    /* TO_CNT (2 bits) */
-    out->TSP_Packet_reg_type1.to_cnt = get_bits(p, index_var, 2);
-
-    for(uint8_t i = 0; i < out->TSP_Packet_reg_type1.to_cnt; i++)
-    {
-        /* TO_SPEED (5 bits) */
-        out->TSP_Packet_reg_type1.to_speed[i] = get_bits(p, index_var, 5);
-
-        /* DIFF_DIST_TO (15 bits) */
-        out->TSP_Packet_reg_type1.diff_dist_to[i] = get_bits(p, index_var, 15);
-
-        /* TO_SPEED_REL_DIST (12 bits) */
-        out->TSP_Packet_reg_type1.to_speed_rel_dist[i] = get_bits(p, index_var, 12);
-    }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->TSP_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*TLI Packet Parsing*/
-    /* SUB_PKT_TYPE (TLI) (4 bits)*/
-    out->TLI_Packet_reg_type1.sub_pkt_type_tli = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_TLI (7 bits) */
-    out->TLI_Packet_reg_type1.sub_pkt_len_tli = get_bits(p, index_var, 7);
-
-    /* DIST_DUP_TAG (4 bits) */
-    out->TLI_Packet_reg_type1.dist_dup_tag = get_bits(p, index_var, 4);
-
-    /* ROUTE_RFID_CNT (6 bits) */
-    out->TLI_Packet_reg_type1.route_rfid_cnt = get_bits(p, index_var, 6);
-
-    if(out->TLI_Packet_reg_type1.route_rfid_cnt > 0)
-        rfid_Count = 0; // used in rfid_rx.c file
-
-    for(uint8_t i = 0; i < out->TLI_Packet_reg_type1.route_rfid_cnt; i++)
-    {
-        /* DIST_NXT_RFID (11 bits) */
-        out->TLI_Packet_reg_type1.dist_nxt_rfid[i] = get_bits(p, index_var, 11);
-
-        /* NXT_RFID_TAG_ID (10 bits) */
-        out->TLI_Packet_reg_type1.nxt_rfid_tag_id[i] = get_bits(p, index_var, 10);
-
-        /* DUP_TAG_DIR (1 bit)*/
-        out->TLI_Packet_reg_type1.dup_tag_dir[i] = get_bits(p, index_var, 1);
-    }
-
-    /* ABS_LOC_RESET (1 bit)*/
-    out->TLI_Packet_reg_type1.abs_loc_reset = get_bits(p, index_var, 1);
-
-    if(out->TLI_Packet_reg_type1.abs_loc_reset == 1)
-    {
-        /* START_DIST_TO_LOC_RESET (15 bits) */
-        out->TLI_Packet_reg_type1.start_dist_loc_reset = get_bits(p, index_var, 15);
-
-        /* ADJ_LOCO_DIR (2 bits) */
-        out->TLI_Packet_reg_type1.adj_loco_dir = get_bits(p, index_var, 2);
-
-        /* ABS_LOC_CORRECTION (23 bits) */
-        out->TLI_Packet_reg_type1.abs_loc_correction = get_bits(p, index_var, 23);
-    }
-
-    /* ADJ_LINE_CNT (3 bits) */
-    out->TLI_Packet_reg_type1.adj_line_cnt = get_bits(p, index_var, 3);
-
-    for(uint8_t i = 0; i <= out->TLI_Packet_reg_type1.adj_line_cnt; i++)
-    {
-        /* LINE_TIN (9 bits) */
-        out->TLI_Packet_reg_type1.line_tin[i] = get_bits(p, index_var, 9);
-    }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->TLI_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*TCD Packet Parsing*/
-    /* SUB_PKT_TYPE (TC) (4 bits)*/
-    out->TCD_Packet_reg_type1.sub_pkt_type_tc = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_TC (7 bits) */
-    out->TCD_Packet_reg_type1.sub_pkt_len_tc = get_bits(p, index_var, 7);
-
-    /* TRACKCOND_CNT (4 bits) */
-    out->TCD_Packet_reg_type1.trackcond_cnt = get_bits(p, index_var, 4);
-
-    for(uint8_t i = 0; i < out->TCD_Packet_reg_type1.trackcond_cnt; i++)
-    {
-        /* TRACKCOND_TYPE (4 bits) */
-        out->TCD_Packet_reg_type1.trackcond_type[i] = get_bits(p, index_var, 4);
-
-        /* START_DIST_TRACKCOND (15 bits) */
-        out->TCD_Packet_reg_type1.start_dist_trackcond[i] = get_bits(p, index_var, 15);
-
-        /* LENGTH_TRACKCOND (15 bits) */
-        out->TCD_Packet_reg_type1.length_trackcond[i] = get_bits(p, index_var, 15);
-    }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->TCD_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    /*TSR Packet Parsing*/
-    /* SUB_PKT_TYPE (TSR) (4 bits)*/
-    out->TSR_Packet_reg_type1.sub_pkt_type_tsr = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN_TSR (7 bits) */
-    out->TSR_Packet_reg_type1.sub_pkt_len_tsr = get_bits(p, index_var, 7);
-
-    /* TSR_STATUS (2 bits) */
-    out->TSR_Packet_reg_type1.tsr_status = get_bits(p, index_var, 2);
-
-    /* TSR_Info_CNT (5 bits) */
-    out->TSR_Packet_reg_type1.tsr_info_cnt = get_bits(p, index_var, 5);
-
-    for(uint8_t i = 0; i < out->TSR_Packet_reg_type1.tsr_info_cnt; i++)
-    {
-        /* TSR_ID (8 bits) */
-        out->TSR_Packet_reg_type1.tsr_id[i] = get_bits(p, index_var, 8);
-
-        /* TSR_DISTANCE (15 bits) */
-        out->TSR_Packet_reg_type1.tsr_distance[i] = get_bits(p, index_var, 15);
-
-        /* TSR_LENGTH (15 bits) */
-        out->TSR_Packet_reg_type1.tsr_length[i] = get_bits(p, index_var, 15);
-
-        /* TSR_CLASS (1 bit)*/
-        out->TSR_Packet_reg_type1.tsr_class[i] = get_bits(p, index_var, 1);
-
-        /* SPEEDS (6 bits each)*/
-        if(out->TSR_Packet_reg_type1.tsr_class[i] == 0)
-        {
-            out->TSR_Packet_reg_type1.tsr_universal_speed[i] = get_bits(p, index_var, 6);   // from spec (byte3 bits 6:1)
-        }
-        else if(out->TSR_Packet_reg_type1.tsr_class[i] == 1)
-        {
-            out->TSR_Packet_reg_type1.tsr_class_a_speed[i] = get_bits(p, index_var, 6);
-            out->TSR_Packet_reg_type1.tsr_class_b_speed[i] = get_bits(p, index_var, 6);
-            out->TSR_Packet_reg_type1.tsr_class_c_speed[i] = get_bits(p, index_var, 6);
-        }
-
-        /* TSR_WHISTLE (2 bits) */
-        out->TSR_Packet_reg_type1.tsr_whistle[i] = get_bits(p, index_var, 2);
-    }
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->TSR_Packet_reg_type1.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-    //  MAC CODE AND CRC RMOVED BY ANMOL BECAUSE IT WILL BE TAKEN CARE ON TIVA SIDE
-
-    //    /*END Packet Parsing*/
-    //    /* LOCO MAC CODE (32 bits) */
-    //    out->END_Packet_reg_type1.loco_mac_code = get_bits(p, index_var, 32);
-    //
-    //    /* PKT CRC (complete 32 bits) */
-    //    out->END_Packet_reg_type1.pkt_crc = get_bits(p, index_var, 32);
-
-    uint16_t actual_len = out->radio_header_reg_type1.pkt_length;
-
-    if (actual_len > len)
-        return 0;
-
-    // if (actual_len < RADIO_CRC_SIZE)
-    //     return 0;
-
-    // uint32_t calc_crc = radio_crc32(p, actual_len - RADIO_CRC_SIZE);
-
-    // if (calc_crc != out->END_Packet_reg_type1.pkt_crc)
-    //     return 0;
-
-    return 1;
 }
 
-uint8_t radio_parse_reg_type2(const uint8_t *p, uint16_t len, radio_reg_type2_t *out)
+void radio_send_reg_type2(radio_id_t radio_id)
 {
-    if (!p || !out)
-        return 0;
+    uint8_t can_frame[8];
+    radio_ctx.payload_len = radio_build_reg_type2_payload(radio_ctx.payload);
+    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
+    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
+        return;
 
-    memset(out, 0, sizeof(*out));
-
-    index_var = 0;
-
-    /*Radio Header Parsing*/
-    /* PKT_TYPE (4 bits) */
-    out->radio_header_reg_type2.pkt_type = get_bits(p, index_var, 4);
-
-    /* PKT_LENGTH (10 bits) */
-    out->radio_header_reg_type2.pkt_length = get_bits(p, index_var, 10);
-
-    /* FRAME_NUM (17 bits) */
-    out->radio_header_reg_type2.frame_num = get_bits(p, index_var, 17);
-
-    /* SOURCE_STN_ID (16 bits) */
-    out->radio_header_reg_type2.source_stn_id = get_bits(p, index_var, 16);
-
-    /* SOURCE_VERSION (3 bits) */
-    out->radio_header_reg_type2.source_version = get_bits(p, index_var, 3);
-
-    /* DEST_LOCO_ID (20 bits) */
-    out->radio_header_reg_type2.dest_loco_id = get_bits(p, index_var, 20);
-
-    /* REF_PROF_ID (4 bits) */
-    out->radio_header_reg_type2.ref_prof_id = get_bits(p, index_var, 4);
-
-    /* LAST_REF_RFID (10 bits) */
-    out->radio_header_reg_type2.last_ref_rfid = get_bits(p, index_var, 10);
-
-    /* DIST_PKT_START (15 bits) */
-    out->radio_header_reg_type2.dist_pkt_start = get_bits(p, index_var, 15);
-
-    /* PKT_DIR (2 bits) */
-    out->radio_header_reg_type2.pkt_dir = get_bits(p, index_var, 2);
-
-    //3 Padding bits
-    out->radio_header_reg_type2.padding_bits = get_bits(p, index_var, 3);
-
-    /*MA Packet Parsing*/
-    /* SUB_PKT_TYPE (4 bits) */
-    out->MA_Packet_reg_type2.sub_pkt_type = get_bits(p, index_var, 4);
-
-    /* SUB_PKT_LEN (7 bits) */
-    out->MA_Packet_reg_type2.sub_pkt_len = get_bits(p, index_var, 7);
-
-    /* FRAME_OFFSET (4 bits) */
-    out->MA_Packet_reg_type2.frame_offset = get_bits(p, index_var, 4);
-
-    /* DEST_LOCO_SOS (1 + 3 = 4 bits) */
-    out->MA_Packet_reg_type2.dest_loco_sos = get_bits(p, index_var, 4);
-
-    /* TRAIN_SECTION_TYPE (2 bits) */
-    out->MA_Packet_reg_type2.train_section_type = get_bits(p, index_var, 2);
-
-    /* ================= CUR_SIG_INFO (17 bits) ================= */
-    out->MA_Packet_reg_type2.cur_sig_info = get_bits(p, index_var, 17);
-
-    uint32_t sig = (reg_type2.MA_Packet_reg_type2.cur_sig_info >> 9) & 0x3F; //a14 to a9
-
-//    if(sig >= 16 && sig <= 21)
-//    {
-//        input_write.raw_flags[1] |= (1U << 26);   // Signals that don't require Standstill override
-//    }
-//    else
-//    {
-//        input_write.raw_flags[1] &= ~(1U << 26);
-//    }
-
-    /* CUR_SIG_ASPECT (complete 2 + 4 = 6 bits) */
-    out->MA_Packet_reg_type2.cur_sig_aspect = get_bits(p, index_var, 6);
-
-    /* NEXT_SIG_ASPECT (4 + 2 = 6 bits) */
-    out->MA_Packet_reg_type2.next_sig_aspect = get_bits(p, index_var, 6);
-
-    /* APPR_SIG_DIST (6 + 8 + 1 = 15 bits) */
-    out->MA_Packet_reg_type2.appr_sig_dist = get_bits(p, index_var, 15);
-
-    /* AUTHORITY_TYPE (2 bits) */
-    out->MA_Packet_reg_type2.authority_type = get_bits(p, index_var, 2);
-
-    /* AUTHORIZED_SPEED (6 bits) */
-    if(out->MA_Packet_reg_type2.authority_type == 1)
-        out->MA_Packet_reg_type2.authorized_speed = get_bits(p, index_var, 6);
-
-    /* MA_W_R_T_SIG (16 bits) */
-    out->MA_Packet_reg_type2.ma_wrt_sig = get_bits(p, index_var, 16);
-
-    /* REQ_SHORTEN_MA (1 bit) */
-    out->MA_Packet_reg_type2.req_shorten_ma = get_bits(p, index_var, 1);
-
-    /* NEW_MA (16 bits) */
-    if(out->MA_Packet_reg_type2.req_shorten_ma == 1)
-        out->MA_Packet_reg_type2.new_ma = get_bits(p, index_var, 16);
-
-    /* TRAIN_LENGTH_INFO_STS (1 bit)*/
-    out->MA_Packet_reg_type2.trn_len_info_sts = get_bits(p, index_var, 1);
-
-    if(out->MA_Packet_reg_type2.trn_len_info_sts == 1)
+    uint8_t i; // Loop runs 5 times (for 5 frames)
+    for ( i = 0; i < radio_ctx.seq_total; i++)
     {
-        /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
-        out->MA_Packet_reg_type2.trn_len_info_type = get_bits(p, index_var, 1);
-
-        /* REF_FRAME_NUM_TLM (17 bits) */
-        out->MA_Packet_reg_type2.ref_frame_num_tlm = get_bits(p, index_var, 17);
-
-        /* REF_OFFSET_INT_TLM (8 bits) */
-        out->MA_Packet_reg_type2.ref_offset_int_tlm = get_bits(p, index_var, 8);
+        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE2,radio_ctx.seq_total,i);
+        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
-
-    /* NEXT_STN_COMM (1 bit) */
-    out->MA_Packet_reg_type2.next_stn_comm = get_bits(p, index_var, 1);
-
-    /* APPR_STN_ID (16 bits) */
-    if(out->MA_Packet_reg_type2.next_stn_comm == 1)
-        out->MA_Packet_reg_type2.appr_stn_id = get_bits(p, index_var, 16);
-
-    /* Padding Bits (X bits) */
-    if((index_var % 8) != 0)
-        out->MA_Packet_reg_type2.padding_bits = get_bits(p, index_var, (8 - (index_var % 8)));
-
-
-    //  MAC CODE AND CRC RMOVED BY ANMOL BECAUSE IT WILL BE TAKEN CARE ON TIVA SIDE
-
-    //    /* LOCO MAC CODE (32 bits) */
-    //    out->END_Packet_reg_type2.loco_mac_code = get_bits(p, index_var, 32);
-
-    /* PKT CRC (complete 32 bits) */
-    //    out->END_Packet_reg_type2.pkt_crc = get_bits(p, index_var, 32);
-
-    uint16_t actual_len = out->radio_header_reg_type2.pkt_length;
-
-    if (actual_len > len)
-        return 0;
-
-    if (actual_len < RADIO_CRC_SIZE)
-        return 0;
-
-    // uint32_t calc_crc = radio_crc32(p, actual_len - RADIO_CRC_SIZE);
-
-    // if (calc_crc != out->END_Packet_reg_type2.pkt_crc)
-    //     return 0;
-
-    return 1;
+    radio_info_ack_tx_done();
 }
+
 void check_for_transmit_arp(void)
 {
     if(comm_mandatory_area && (approaching_station_id != prev_stn_id))
     {
         radio_send_arp(RADIO_ID_1);
         radio_send_arp(RADIO_ID_2);
-
     }
 }

@@ -379,7 +379,7 @@ void v_1sTasks(void)
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
     count++;
-    check_for_transmit_arp();
+//    check_for_transmit_arp();
     /* Only for testing     
     if(count >= 10)
     {
