@@ -92,6 +92,8 @@ int32_t IncTest2;
 int32_t LastIncTest1;
 int32_t LastIncTest2;
 
+extern volatile bool incremental_test_failed;
+
 extern volatile uint8_t gps_faults;
 
 /* ---------- Functions ---------- */

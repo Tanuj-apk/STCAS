@@ -760,7 +760,7 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
 }
 
 /* ================= INTERNAL HELPERS ================= */
-static uint32_t get_bits(const uint8_t *buf, uint16_t bit, uint8_t len)
+uint32_t get_bits(const uint8_t *buf, uint16_t bit, uint8_t len)
 {
 
     uint32_t val = 0;

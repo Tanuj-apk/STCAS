@@ -437,6 +437,7 @@ void v_1sTasks(void)
             if (seconds_in_fallback == FALLBACK_TIMEOUT_SEC)
             {
                 cpu_time_valid = 0;
+                //! Switch to SF mode
                 uint8_t dbgTime[96];
                 uint32 lenT = sprintf((char *)dbgTime, "TIME INVALID: cpu=%lu fb_sec=%lu\r\n",
                                       (unsigned long)cpu_time_sec, (unsigned long)seconds_in_fallback);
