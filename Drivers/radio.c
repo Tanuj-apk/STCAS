@@ -11,9 +11,12 @@
 #include <math.h>
 
 //! Hardcoded loco ID and prev_frame for testing Condition 24 in StateMachine.c
-uint32_t g_my_loco_id = 0x12345; // hardcoded for testing
+uint32_t g_my_stn_id = 0x12345; // hardcoded for testing
 uint16_t approaching_station_id = 0; //Updated in rfid.c
 //!==========================================================================
+
+#define KAVACH_VERSION_3_2   1
+#define KAVACH_VERSION_4_0   2
 
 dist_array_t distance_db[TLM_HISTORY_SECONDS];
 uint8_t current_sec_index = 0U;
@@ -337,7 +340,7 @@ static uint8_t radio_build_arp_payload(uint8_t *payload)
     /* =========================================================
      * FRAME 0  ? payload[0–5]
      * ========================================================= */
-    uint32_t source_loco_id = g_my_loco_id;
+    uint32_t source_loco_id /*= g_my_loco_id*/;
 
     /* PKT_TYPE : 4 bits */
     set_bits(payload, bit_index, 4, RADIO_PKT_TYPE_ARP);
@@ -624,360 +627,7 @@ void radio_send_arp(radio_id_t radio_id)
     radio_can_arp_transmit_flag = 1;
 }
 
-/* ================= TX: ONBOARD REGULAR PACKET ================= */
-
-//? ORP Payload = complete data of ORP packet
-//? [Frame0][Frame1][Frame2][Frame3][Frame4]
-static uint8_t radio_build_orp_payload(uint8_t *buf)
-{
-    memset(buf, 0, RADIO_MAX_PAYLOAD_LEN);
-    uint16_t bit_index = 0;
-
-    /* =========================================================
-     * FRAME 0  ? payload[0–5]  ? (Spec Byte 2–7)
-     * ========================================================= */
-
-    uint32_t source_loco_id = g_my_loco_id;
-
-    /* PKT_TYPE : 4 bits */
-    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_ORP);
-    bit_index += 4;
-
-    /* PKT_LEN : 7 bits (filled later) */
-    uint16_t pkt_len_bit_pos = bit_index;
-    set_bits(buf, bit_index, 7, 0);
-    bit_index += 7;
-
-    /* FRAME_NUM : 17 bits */
-    set_bits(buf, bit_index, 17, frame_num);
-    bit_index += 17;
-
-    /* SOURCE_LOCO_ID : 20 bits */
-    set_bits(buf, bit_index, 20, source_loco_id);
-    bit_index += 20;
-
-    /* =========================================================
-     * FRAME 1  ? payload[6–11]
-     * ========================================================= */
-    uint8_t source_loco_version = 2;
-    uint32_t abs_loc = radio_get_latest_abs_loc();
-
-    // uint16_t train_length = 0; // TODO: Trail length measurement implementation
-    uint16_t train_length = (uint16_t)calculated_train_length;
-
-    //================l_doubtover and l_doubtunder implementation ===================
-    uint16_t l_doubtover;
-    uint16_t l_doubtunder;
-    uint32_t delta_distance;
-
-//    delta_distance = distance_m - odo_distance_radio_rfid_ref;
-
-    uint16_t uncertainty;
-
-    uncertainty = 5U + ((delta_distance * 5U) / 100U);
-
-    l_doubtover = uncertainty;
-    l_doubtunder = uncertainty;
-    //===============================================================================
-    uint8_t train_integrity = 0; //! Future Use
-
-    /* SOURCE_LOCO_VERSION : 3 bits */
-    set_bits(buf, bit_index, 3, source_loco_version);
-    bit_index += 3;
-
-    /* ABS_LOCO_LOC : 23 bits */
-    set_bits(buf, bit_index, 23, abs_loc);
-    bit_index += 23;
-
-    /* L_DOUBTOVER : 9 bits */
-    set_bits(buf, bit_index, 9, l_doubtover);
-    bit_index += 9;
-
-    /* L_DOUBTUNDER : 9 bits */
-    set_bits(buf, bit_index, 9, l_doubtunder);
-    bit_index += 9;
-
-    /* TRAIN_INT : 2 bits */
-    set_bits(buf, bit_index, 2, train_integrity);
-    bit_index += 2;
-
-    /* TRAIN_LENGTH : 11 bits */
-    set_bits(buf, bit_index, 11, train_length);
-    bit_index += 11;
-
-    /* =========================================================
-     * FRAME 2  ? payload[12–17]
-     * ========================================================= */
-
-    uint16_t train_speed /*= (uint16_t)speed_kmh*/;
-    uint8_t movement_dir = 0;
-    if (trainDir == 0)
-    {
-        movement_dir = 1; // 01
-    }
-    else if (trainDir == 1)
-    {
-        movement_dir = 2; // 10
-    }
-    else
-    {
-        movement_dir = 0; // unknown
-    }
-    uint8_t loco_mode /*= (uint8_t)g_current*/;
-    uint8_t emg_status = 0; // TODO: Add emergency state
-    uint8_t tag_link_info = 0; //TODO: Add logic for this using RFID code
-
-    uint8_t dbnum;
-
-    if(rfid_db_count != 0)
-        dbnum = (rfid_db_head + RFID_DB_SIZE - 1) % RFID_DB_SIZE;
-    else
-        dbnum = 0;
-
-    uint16_t tag_uid = 0;
-    uint16_t tin = 0; // Unique ID of RFID tag set
-    uint8_t is_duplicate;
-    uint8_t prev_dbnum;
-    uint16_t prev_tag_uid = 0;
-    uint8_t prev_is_duplicate;
-
-//    odo_distance_radio_rfid_ref = rfid_db[dbnum].odo_distance_rfid_ref;
-//
-//    if(rfid_db[dbnum].tag_type == 1)
-//    {
-//        tag_uid = rfid_db[dbnum].data.normal.tag_uid;
-//        if(trainDir == 0)
-//        {
-//            tin = rfid_db[dbnum].data.normal.tin_nominal;
-//        }
-//        else if(trainDir == 1)
-//        {
-//            tin = rfid_db[dbnum].data.normal.tin_reverse;
-//        }
-//
-//        is_duplicate = rfid_db[dbnum].data.normal.is_duplicate;
-//    }
-//    else if(rfid_db[dbnum].tag_type == 2)
-//    {
-//        tag_uid = rfid_db[dbnum].data.lc.tag_set_id;
-//        if(trainDir == 0)
-//        {
-//            tin = rfid_db[dbnum].data.lc.tin_nominal;
-//        }
-//        else if(trainDir == 1)
-//        {
-//            tin = rfid_db[dbnum].data.lc.tin_reverse;
-//        }
-//        is_duplicate= rfid_db[dbnum].data.lc.is_duplicate;
-//    }
-//    else if(rfid_db[dbnum].tag_type == 3)
-//    {
-//        tag_uid = rfid_db[dbnum].data.adj.tag_set_id;
-//        if(trainDir == 0)
-//        {
-//            tin = rfid_db[dbnum].data.adj.tin_nominal;
-//        }
-//        else if(trainDir == 1)
-//        {
-//            tin = rfid_db[dbnum].data.adj.tin_reverse;
-//        }
-//        is_duplicate = rfid_db[dbnum].data.adj.is_duplicate;
-//    }
-//    else if(rfid_db[dbnum].tag_type == 4)
-//    {
-//        tag_uid = rfid_db[dbnum].data.junction.tag_set_id;
-//        if (abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_1) <
-//                abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_2)) {
-//            tin = rfid_db[dbnum].data.junction.tin_1;
-//        } else {
-//            tin = rfid_db[dbnum].data.junction.tin_2;
-//        }
-//        is_duplicate = rfid_db[dbnum].data.junction.tag_duplicate;
-//    }
-//
-//    if(rfid_db[dbnum].location_check == 1)
-//    {
-//        tag_link_info = 5;
-//    }
-//    else if(rfid_db[dbnum].location_check == 2)
-//    {
-//        tag_link_info = 3;
-//    }
-//    else if(rfid_db[dbnum].location_check == 0)
-//    {
-//        if(rfid_db_count > 1)
-//        {
-//            prev_dbnum = (rfid_db_head + RFID_DB_SIZE - 2) % RFID_DB_SIZE;
-//            if(rfid_db[prev_dbnum].tag_type == 1)
-//            {
-//                prev_tag_uid = rfid_db[prev_dbnum].data.normal.tag_uid;
-//                prev_is_duplicate = rfid_db[prev_dbnum].data.normal.is_duplicate;
-//            }
-//            else if(rfid_db[prev_dbnum].tag_type == 2)
-//            {
-//                prev_tag_uid = rfid_db[prev_dbnum].data.lc.tag_set_id;
-//                prev_is_duplicate= rfid_db[prev_dbnum].data.lc.is_duplicate;
-//            }
-//            else if(rfid_db[prev_dbnum].tag_type == 3)
-//            {
-//                prev_tag_uid = rfid_db[prev_dbnum].data.adj.tag_set_id;
-//                prev_is_duplicate = rfid_db[prev_dbnum].data.adj.is_duplicate;
-//            }
-//            else if(rfid_db[prev_dbnum].tag_type == 4)
-//            {
-//                prev_tag_uid = rfid_db[prev_dbnum].data.junction.tag_set_id;
-//                prev_is_duplicate = rfid_db[prev_dbnum].data.junction.tag_duplicate;
-//            }
-//
-//            if((prev_tag_uid == tag_uid) && (prev_is_duplicate != is_duplicate))
-//            {
-//                if((reg_type1.TLI_Packet_reg_type1.dup_tag_dir[match_index] == trainDir) && (is_duplicate == 0))
-//                {
-//                    tag_link_info = 4;
-//                }
-//                else
-//                {
-//                    if(((abs(rfid_db[dbnum].odo_distance_rfid_ref - rfid_db[prev_dbnum].odo_distance_rfid_ref) < 15) &&
-//                            (reg_type1.TLI_Packet_reg_type1.dist_dup_tag == 0)) ||
-//                            ((abs(rfid_db[dbnum].odo_distance_rfid_ref - rfid_db[prev_dbnum].odo_distance_rfid_ref) < reg_type1.TLI_Packet_reg_type1.dist_dup_tag) &&
-//                                    (reg_type1.TLI_Packet_reg_type1.dist_dup_tag != 0)))  //TODO: Clarity needed on resetting state TLI subpacket data.
-//                    {
-//                        tag_link_info = 6;
-//                    }
-//                    else if(((abs(rfid_db[dbnum].odo_distance_rfid_ref - rfid_db[prev_dbnum].odo_distance_rfid_ref) > 15) &&
-//                            (reg_type1.TLI_Packet_reg_type1.dist_dup_tag == 0)) ||
-//                            ((abs(rfid_db[dbnum].odo_distance_rfid_ref - rfid_db[prev_dbnum].odo_distance_rfid_ref) > reg_type1.TLI_Packet_reg_type1.dist_dup_tag) &&
-//                                    (reg_type1.TLI_Packet_reg_type1.dist_dup_tag != 0)))
-//                    {
-//                        tag_link_info = 7;
-//                    }
-//                }
-//            }
-//            else
-//            {
-//                if(is_duplicate == 0)
-//                {
-//                    if((distance_m - rfid_db[dbnum].odo_distance_rfid_ref) >= 15)
-//                    {
-//                        tag_link_info = 1;
-//                    }
-//                }
-//                else if(is_duplicate == 1)
-//                {
-//                    if((distance_m - rfid_db[dbnum].odo_distance_rfid_ref) >= 15)
-//                    {
-//                        tag_link_info = 2;
-//                    }
-//                }
-//            }
-//        }
-//        else
-//        {
-//            if(is_duplicate == 0)
-//            {
-//                if((distance_m - rfid_db[dbnum].odo_distance_rfid_ref) >= 15)
-//                {
-//                    tag_link_info = 1;
-//                }
-//            }
-//            else if(is_duplicate == 1)
-//            {
-//                if((distance_m - rfid_db[dbnum].odo_distance_rfid_ref) >= 15)
-//                {
-//                    tag_link_info = 2;
-//                }
-//            }
-//        }
-//    }
-
-    /* TRAIN_SPEED : 9 bits */
-    set_bits(buf, bit_index, 9, train_speed);
-    bit_index += 9;
-
-    /* MOVEMENT_DIR : 2 bits */
-    set_bits(buf, bit_index, 2, movement_dir);
-    bit_index += 2;
-
-    /* EMERGENCY_STATUS : 3 bits */
-    set_bits(buf, bit_index, 3, emg_status);
-    bit_index += 3;
-
-    /* LOCO_MODE : 4 bits */
-    set_bits(buf, bit_index, 4, loco_mode);
-    bit_index += 4;
-
-    /* LAST_RFID_TAG : 10 bits */
-    set_bits(buf, bit_index, 10, tag_uid);
-    bit_index += 10;
-
-    /* TAG_DUP : 1 bit */
-    set_bits(buf, bit_index, 1, is_duplicate);
-    bit_index += 1;
-
-    /* TAG_LINK_INFO : 3 bits */
-    set_bits(buf, bit_index, 3, tag_link_info);
-    bit_index += 3;
-
-    /* TIN : 9 bits */
-    set_bits(buf, bit_index, 9, tin);
-    bit_index += 9;
-
-    /* =========================================================
-     * FRAME 3  ? payload[18–23]
-     * ========================================================= */
-    //TODO: Add these variables
-    uint8_t brake_applied = 0;
-
-    uint8_t new_ma_reply = 0;
-
-    uint8_t sig_ov /*= override_active*/;
-
-    uint8_t info_ack = radio_info_ack_get_current();
-
-    uint8_t spare = 0;
-
-    uint8_t loco_health_status = 0;
-
-    //    uint32_t mac_code = 0;
-
-    /* Brake_Applied : 3 bits */
-    set_bits(buf, bit_index, 3, brake_applied);
-    bit_index += 3;
-
-    /* NEW_MA_REPLY : 2 bits */
-    set_bits(buf, bit_index, 2, new_ma_reply);
-    bit_index += 2;
-
-    /* LAST_REF_PROFILE_NUM : 4 bits */
-    set_bits(buf, bit_index, 4, last_ref_profile_num);
-    bit_index += 4;
-
-    /* SIG_OV : 1 bit */
-    set_bits(buf, bit_index, 1, sig_ov);
-    bit_index += 1;
-
-    /* Info_Ack : 4 bits */
-    set_bits(buf, bit_index, 4, info_ack);
-    bit_index += 4;
-
-    /* SPARE : 2 bits */
-    set_bits(buf, bit_index, 2, spare);
-    bit_index += 2;
-
-    /* Loco_Health_Status : 6 bits */
-    set_bits(buf, bit_index, 6, loco_health_status);
-    bit_index += 6;
-
-    /* =========================================================
-     * INSERT PKT_LEN
-     * ========================================================= */
-
-    uint16_t payload_len = (bit_index + 7) / 8;
-
-    /* Insert PKT_LEN into header */
-    set_bits(buf, pkt_len_bit_pos, 7, payload_len);
-    return payload_len;
-}
+/* ================= RX: ONBOARD REGULAR PACKET ================= */
 
 radio_orp_t orp = {0};
 static uint8_t radio_parse_orp(const uint8_t *p, uint16_t len)
@@ -1034,23 +684,6 @@ static uint8_t radio_parse_orp(const uint8_t *p, uint16_t len)
 
     g_orp = orp;
     return 1;
-}
-
-void radio_send_orp(radio_id_t radio_id)
-{
-    uint8_t can_frame[8];
-    radio_ctx.payload_len = radio_build_orp_payload(radio_ctx.payload);
-    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
-    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
-        return;
-
-    uint8_t i; // Loop runs 5 times (for 5 frames)
-    for ( i = 0; i < radio_ctx.seq_total; i++)
-    {
-        radio_build_fragment(can_frame,RADIO_PKT_TYPE_ORP,radio_ctx.seq_total,i);
-        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-    }
-    radio_info_ack_tx_done();
 }
 
 /* ================= RX ================= */
@@ -1184,52 +817,101 @@ static uint32_t get_bits(const uint8_t *buf, uint16_t bit, uint8_t len)
  * TOTAL                     208 bits = 26 bytes
  * ------------------------------------------------------------------------
  * */
-radio_aap_t aap = {0};
-static uint8_t radio_parse_aap(const uint8_t *p, uint16_t len)
+static uint8_t radio_build_aap_payload(uint8_t *buf)
 {
-    if (!p || len < 18)   // Minimum length check
-        return 0;
+    memset(buf, 0, RADIO_MAX_PAYLOAD_LEN);
+    uint16_t bit_index = 0;
 
-    index_var = 0;
+    /* =========================================================
+     * FRAME 0  ? payload[0–5]  ? (Spec Byte 2–7)
+     * ========================================================= */
 
-    /* -------- HEADER -------- */
-    aap.pkt_type = get_bits(p, index_var, 4);           // 4 bits
-    aap.pkt_len = get_bits(p, index_var, 7);                      // 7 bits (combined)
-    aap.frame_num = get_bits(p, index_var, 17);         // 17 bits
-    aap.station_id = get_bits(p, index_var, 16);        // 16 bits
+    uint32_t source_stn_id = g_my_stn_id;
 
-    if (aap.station_id != 0) {
-        prev_stn_id = approaching_station_id;
+    /* PKT_TYPE : 4 bits */
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    bit_index += 4;
+
+    /* PKT_LEN : 7 bits (filled later) */
+    uint16_t pkt_len_bit_pos = bit_index;
+    set_bits(buf, bit_index, 7, 0);
+    bit_index += 7;
+
+    /* FRAME_NUM : 17 bits */
+    set_bits(buf, bit_index, 17, frame_num);
+    bit_index += 17;
+
+    /* SOURCE_STN_ID : 16 bits */
+    set_bits(buf, bit_index, 16, source_stn_id);
+    bit_index += 16;
+
+    /* =========================================================
+     * FRAME 1  ? payload[6–11]
+     * ========================================================= */
+    uint8_t source_stn_version = KAVACH_VERSION_4_0;
+
+    /* SOURCE_LOCO_VERSION : 3 bits */
+    set_bits(buf, bit_index, 3, source_stn_version);
+    bit_index += 3;
+
+    uint32_t stn_abs_loc = 0/*radio_get_latest_abs_loc()*/;  //Temp set to 0 TO DO: add variable that will be hardcoded to a certain value
+
+    /* ABS_LOCO_LOC : 23 bits */
+    set_bits(buf, bit_index, 23, stn_abs_loc);
+    bit_index += 23;
+
+    uint32_t dest_loco_id /*= g_my_loco_id*/;
+
+    /* DEST_LOCO_ID : 20 bits */
+    set_bits(payload, bit_index, 20, dest_loco_id);
+    bit_index += 20;
+
+    uint16_t alloted_uplink_freq;  // Set the freq
+    /* ALLOTED_UPLINK_FREQ : 12 bits */
+    set_bits(buf, bit_index, 12, alloted_uplink_freq);
+    bit_index += 12;
+
+    uint16_t alloted_downlink_freq;  // Set the freq
+    /* ALLOTED_DOWNLINK_FREQ : 12 bits */
+    set_bits(buf, bit_index, 12, alloted_downlink_freq);
+    bit_index += 12;
+
+    uint8_t alloted_TDMA_timeslot;  // Set the timeslot
+    /* ALLOTED_TDMA_TIMESLOT : 7 bits */
+    set_bits(buf, bit_index, 7, alloted_TDMA_timeslot);
+    bit_index += 7;
+
+    uint16_t stn_rnd_num_rs;  // Set the num
+    /* STATION_RND_NUM_RS : 16 bits */
+    set_bits(buf, bit_index, 16, stn_rnd_num_rs);
+    bit_index += 16;
+
+    uint8_t stn_TDMA;  // Set the timeslot
+    /* STATION_TDMA : 7 bits */
+    set_bits(buf, bit_index, 7, stn_TDMA);
+    bit_index += 7;
+
+    uint16_t payload_len = (bit_index + 7) / 8;
+    /* Insert PKT_LEN back into header */
+    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
+    return payload_len;
+}
+
+void radio_send_aap(radio_id_t radio_id)
+{
+    uint8_t can_frame[8];
+    radio_ctx.payload_len = radio_build_aap_payload(radio_ctx.payload);
+    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
+    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
+        return;
+
+    uint8_t i; // Loop runs 5 times (for 5 frames)
+    for ( i = 0; i < radio_ctx.seq_total; i++)
+    {
+        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AAP,radio_ctx.seq_total,i);
+        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
-
-    aap.version = get_bits(p, index_var, 3);            // 3 bits
-
-    /* -------- STATION LOCATION -------- */
-    aap.location = get_bits(p, index_var, 23);          // 23 bits
-
-    /* -------- DEST LOCO ID -------- */
-    aap.dest_loco_id = get_bits(p, index_var, 20);      // 20 bits
-
-    /* -------- FREQUENCIES -------- */
-    aap.uplink_freq = get_bits(p, index_var, 12);       // 12 bits
-    aap.downlink_freq = get_bits(p, index_var, 12);     // 12 bits
-
-    /* -------- TDMA SLOT -------- */
-    aap.tdma_slot = get_bits(p, index_var, 7);          // 7 bits
-
-    /* -------- RANDOM NUMBER -------- */
-    aap.station_random = get_bits(p, index_var, 16);    // 16 bits
-
-    /* -------- STATION TDMA -------- */
-    aap.station_tdma = get_bits(p, index_var, 7);       // 7 bits
-
-    g_aap = aap;
-
-    /* -------- VALIDATION -------- */
-    // if (!radio_validate_crc(p, len, aap.crc))
-    //     return 0;
-
-    return 1;
+    radio_info_ack_tx_done();
 }
 
 /*
@@ -1250,51 +932,81 @@ static uint8_t radio_parse_aap(const uint8_t *p, uint16_t len)
  * ------------------------------------------------------------------------
  */
 
-static uint8_t radio_parse_aep(const uint8_t *p, uint16_t len)
+static uint8_t radio_build_aep_payload(uint8_t *buf)
 {
-    if (!p || len < 9)   // 104 bits = 13 bytes
-        return 0;
+    memset(buf, 0, RADIO_MAX_PAYLOAD_LEN);
+    uint16_t bit_index = 0;
 
-    radio_aep_t aep = {0};
+    /* =========================================================
+     * FRAME 0  ? payload[0–5]  ? (Spec Byte 2–7)
+     * ========================================================= */
 
-    /* ---------------- HEADER ---------------- */
-    index_var = 0;
-    aep.pkt_type = get_bits(p, index_var, 4);
-    // PKT_TYPE → 4 bits → [0 - 3]
+    uint32_t source_stn_id = g_my_stn_id;
 
-    aep.pkt_len  = get_bits(p, index_var, 7);
-    // PKT_LEN → 7 bits → [4 - 10]
+    /* PKT_TYPE : 4 bits */
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    bit_index += 4;
 
-    /* ---------------- FRAME NUMBER ---------------- */
+    /* PKT_LEN : 7 bits (filled later) */
+    uint16_t pkt_len_bit_pos = bit_index;
+    set_bits(buf, bit_index, 7, 0);
+    bit_index += 7;
 
-    aep.frame_num = get_bits(p, index_var, 17);
-    // FRAME_NUM → 17 bits → [11 - 27]
+    /* FRAME_NUM : 17 bits */
+    set_bits(buf, bit_index, 17, frame_num);
+    bit_index += 17;
 
-    /* ---------------- STATION ID ---------------- */
+    /* SOURCE_STN_ID : 16 bits */
+    set_bits(buf, bit_index, 16, source_stn_id);
+    bit_index += 16;
 
-    aep.station_id = get_bits(p, index_var, 16);
-    // SOURCE_STN_ID → 16 bits → [28 - 43]
+    /* =========================================================
+     * FRAME 1  ? payload[6–11]
+     * ========================================================= */
+    uint8_t source_stn_version = KAVACH_VERSION_4_0;
 
-    /* ---------------- VERSION ---------------- */
+    /* SOURCE_LOCO_VERSION : 3 bits */
+    set_bits(buf, bit_index, 3, source_stn_version);
+    bit_index += 3;
 
-    aep.version = get_bits(p, index_var, 3);
-    // VERSION → 3 bits → [44 - 46]
+    uint32_t stn_abs_loc = 0/*radio_get_latest_abs_loc()*/;  //Temp set to 0 TO DO: add variable that will be hardcoded to a certain value
 
-    /* ---------------- LOCATION ---------------- */
+    /* ABS_LOCO_LOC : 23 bits */
+    set_bits(buf, bit_index, 23, stn_abs_loc);
+    bit_index += 23;
 
-    aep.location = get_bits(p, index_var, 23);
-    // STN_ILC_IBS_LOC → 23 bits → [47 - 69]
+    uint32_t gen_sos_call /*= g_my_loco_id*/;
 
-    /* ---------------- GEN SOS ---------------- */
+    /* GENERAL_SOS_CALL : 1 bit */
+    set_bits(payload, bit_index, 1, gen_sos_call);
+    bit_index += 1;
 
-    aep.gen_sos_call = get_bits(p, index_var, 1);
-    // GEN_SOS_CALL → 1 bit → [70]
+    uint16_t padding_bits = 1;  // Set the bits
+    /* PADDING_BITS : X bits */
+    set_bits(buf, bit_index, padding_bits, 0);
+    bit_index += padding_bits;
 
-    /* ---------------- STORE ---------------- */
+    uint16_t payload_len = (bit_index + 7) / 8;
+    /* Insert PKT_LEN back into header */
+    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
+    return payload_len;
+}
 
-    g_aep = aep;
+void radio_send_aep(radio_id_t radio_id)
+{
+    uint8_t can_frame[8];
+    radio_ctx.payload_len = radio_build_aep_payload(radio_ctx.payload);
+    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
+    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
+        return;
 
-    return 1;
+    uint8_t i; // Loop runs 5 times (for 5 frames)
+    for ( i = 0; i < radio_ctx.seq_total; i++)
+    {
+        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AEP,radio_ctx.seq_total,i);
+        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+    }
+    radio_info_ack_tx_done();
 }
 
 static uint8_t radio_is_track_profile_valid(void)
@@ -1487,7 +1199,6 @@ static void radio_process_tlm_type2(void)
 {
     uint32_t event_sec;
     uint32_t event_ms;
-
     uint32_t interpolated_distance;
 
     if (reg_type2.MA_Packet_reg_type2.trn_len_info_sts != 1U)
@@ -1496,11 +1207,8 @@ static void radio_process_tlm_type2(void)
     }
 
     event_sec = (reg_type2.MA_Packet_reg_type2.ref_frame_num_tlm - 1U) / 2U;
-
     event_ms = reg_type2.MA_Packet_reg_type2.ref_offset_int_tlm * 10U;
-
     interpolated_distance = radio_get_tlm_distance(event_sec, event_ms);
-
     if (reg_type2.MA_Packet_reg_type2.trn_len_info_type == 0U)
     {
         tlm_start_distance = interpolated_distance;
@@ -1516,16 +1224,12 @@ static void radio_process_tlm_type2(void)
         if (tlm_start_valid == 1U)
         {
             tlm_end_distance = interpolated_distance;
-
             if (tlm_end_distance > tlm_start_distance)
             {
                 calculated_train_length = tlm_end_distance - tlm_start_distance;
             }
-
             tlm_start_valid = 0U;
-
             tlm_active = 0;
-
             radio_info_ack_push(INFO_ACK_TLM_END);
         }
     }
@@ -1562,11 +1266,662 @@ static void radio_rx_reset(void)
 
 void radio_rx_poll_1s(void)
 {
-    if (radio_rx_ctx.active &&
-            (seconds_uptime - radio_rx_ctx.start_time) > 1U)
+    if (radio_rx_ctx.active && (seconds_uptime - radio_rx_ctx.start_time) > 1U)
     {
         radio_rx_reset();
     }
+}
+
+static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
+{
+    memset(buf, 0, RADIO_MAX_PAYLOAD_LEN);
+    uint16_t bit_index = 0;
+
+    /* =========================================================
+     * FRAME 0  ? payload[0–5]  ? (Spec Byte 2–7)
+     * ========================================================= */
+
+    uint32_t source_stn_id = g_my_stn_id;
+
+    /* PKT_TYPE : 4 bits */
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    bit_index += 4;
+
+    /* PKT_LEN : 7 bits (filled later) */
+    uint16_t pkt_len_bit_pos = bit_index;
+    set_bits(buf, bit_index, 7, 0);
+    bit_index += 7;
+
+    /* FRAME_NUM : 17 bits */
+    set_bits(buf, bit_index, 17, frame_num);
+    bit_index += 17;
+
+    /* SOURCE_STN_ID : 16 bits */
+    set_bits(buf, bit_index, 16, source_stn_id);
+    bit_index += 16;
+
+    /* =========================================================
+     * FRAME 1  ? payload[6–11]
+     * ========================================================= */
+    uint8_t source_stn_version = KAVACH_VERSION_4_0;
+
+    /* SOURCE_LOCO_VERSION : 3 bits */
+    set_bits(buf, bit_index, 3, source_stn_version);
+    bit_index += 3;
+
+    uint32_t dest_loco_id /*= g_my_loco_id*/;
+    /* DEST_LOCO_ID : 20 bits */
+    set_bits(payload, bit_index, 20, dest_loco_id);
+    bit_index += 20;
+
+    uint8_t ref_prof_id /*= g_my_loco_id*/;
+    /* REF_PROF_ID (4 bits) */
+    set_bits(payload, bit_index, 4, ref_prof_id);
+    bit_index += 4;
+
+    uint16_t last_ref_rfid /*= g_my_loco_id*/;
+    /* LAST_REF_RFID (10 bits) */
+    set_bits(payload, bit_index, 10, ref_prof_id);
+    bit_index += 10;
+
+    uint16_t dist_pkt_start /*= g_my_loco_id*/;
+    /* DIST_PKT_START (15 bits) */
+    set_bits(payload, bit_index, 15, ref_prof_id);
+    bit_index += 15;
+
+    uint8_t pkt_dir /*= g_my_loco_id*/;
+    /* PKT_DIR (2 bits) */
+    set_bits(payload, bit_index, 2, pkt_dir);
+    bit_index += 2;
+
+    uint8_t padding_bits = 3;  // Set the bits
+    /* PADDING_BITS : X bits */
+    set_bits(buf, bit_index, padding_bits, 0);
+    bit_index += padding_bits;
+
+    uint16_t MA_pkt_start = bit_index;
+    /*MA Packet Parsing*/
+    uint8_t sub_pkt_type /*= g_my_loco_id*/;
+    /* SUB_PKT_TYPE (4 bits) */
+    set_bits(payload, bit_index, 4, sub_pkt_type);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len /*= g_my_loco_id*/;
+    /* SUB_PKT_LEN (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len);
+    bit_index += 7;
+
+    uint8_t frame_offset /*= g_my_loco_id*/;
+    /* FRAME_OFFSET (4 bits) */
+    set_bits(payload, bit_index, 4, frame_offset);
+    bit_index += 4;
+
+    uint8_t dest_loco_sos /*= g_my_loco_id*/;
+    /* DEST_LOCO_SOS (1 + 3 = 4 bits) */
+    set_bits(payload, bit_index, 4, dest_loco_sos);
+    bit_index += 4;
+
+    uint8_t train_section_type /*= g_my_loco_id*/;
+    /* TRAIN_SECTION_TYPE (2 bits) */
+    set_bits(payload, bit_index, 2, train_section_type);
+    bit_index += 2;
+
+    uint32_t cur_sig_info /*= g_my_loco_id*/;
+    /* ================= CUR_SIG_INFO (17 bits) ================= */
+    set_bits(payload, bit_index, 17, cur_sig_info);
+    bit_index += 17;
+
+    uint8_t cur_sig_aspect /*= g_my_loco_id*/;
+    /* CUR_SIG_ASPECT (complete 2 + 4 = 6 bits) */
+    set_bits(payload, bit_index, 6, cur_sig_aspect);
+    bit_index += 6;
+
+    uint8_t next_sig_aspect /*= g_my_loco_id*/;
+    /* NEXT_SIG_ASPECT (4 + 2 = 6 bits) */
+    set_bits(payload, bit_index, 6, next_sig_aspect);
+    bit_index += 6;
+
+    uint16_t appr_sig_dist /*= g_my_loco_id*/;
+    /* APPR_SIG_DIST (6 + 8 + 1 = 15 bits) */
+    set_bits(payload, bit_index, 15, next_sig_aspect);
+    bit_index += 15;
+
+    uint8_t authority_type /*= g_my_loco_id*/;
+    /* AUTHORITY_TYPE (2 bits) */
+    set_bits(payload, bit_index, 2, authority_type);
+    bit_index += 2;
+
+    /* AUTHORIZED_SPEED (6 bits) */
+    if(authority_type == 1)
+    {
+        uint8_t authorized_speed /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 6, authorized_speed);
+        bit_index += 6;
+    }
+
+    uint16_t ma_wrt_sig /*= g_my_loco_id*/;
+    /* MA_W_R_T_SIG (16 bits) */
+    set_bits(payload, bit_index, 16, ma_wrt_sig);
+    bit_index += 16;
+
+    uint8_t req_shorten_ma /*= g_my_loco_id*/;
+    /* REQ_SHORTEN_MA (1 bit) */
+    set_bits(payload, bit_index, 1, req_shorten_ma);
+    bit_index += 1;
+
+    /* NEW_MA (16 bits) */
+    if(req_shorten_ma == 1)
+    {
+        uint16_t new_ma /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 16, new_ma);
+        bit_index += 16;
+    }
+
+    uint8_t trn_len_info_sts /*= g_my_loco_id*/;
+    /* TRAIN_LENGTH_INFO_STS (1 bit)*/
+    set_bits(payload, bit_index, 1, trn_len_info_sts);
+    bit_index += 1;
+
+    if(trn_len_info_sts == 1)
+    {
+        uint8_t trn_len_info_type /*= g_my_loco_id*/;
+        /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
+        set_bits(payload, bit_index, 1, trn_len_info_type);
+        bit_index += 1;
+
+        uint32_t ref_frame_num_tlm /*= g_my_loco_id*/;
+        /* REF_FRAME_NUM_TLM (17 bits) */
+        set_bits(payload, bit_index, 17, ref_frame_num_tlm);
+        bit_index += 17;
+
+        uint8_t ref_offset_int_tlm /*= g_my_loco_id*/;
+        /* REF_OFFSET_INT_TLM (8 bits) */
+        set_bits(payload, bit_index, 8, ref_offset_int_tlm);
+        bit_index += 8;
+    }
+
+    uint8_t next_stn_comm /*= g_my_loco_id*/;
+    /* NEXT_STN_COMM (1 bit) */
+    set_bits(payload, bit_index, 1, next_stn_comm);
+    bit_index += 1;
+
+
+    /* APPR_STN_ID (16 bits) */
+    if(next_stn_comm == 1)
+    {
+        uint16_t appr_stn_id /*= g_my_loco_id*/;
+        set_bits(payload, bit_index, 16, appr_stn_id);
+        bit_index += 16;
+    }
+
+    if((bit_index - MA_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - MA_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*SSP Packet Parsing*/
+    uint16_t SSP_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_ssp;
+    /* SUB_PKT_TYPE (SSP) (4 bits) */
+    set_bits(payload, bit_index, 4, sub_pkt_type_ssp);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_ssp;
+    /* SUB_PKT_LEN (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_ssp);
+    bit_index += 7;
+
+    uint8_t lm_speed_info_cnt;
+    /* LM_Speed_Info_CNT (5 bits) */
+    set_bits(payload, bit_index, 5, lm_speed_info_cnt);
+    bit_index += 5;
+
+    for(uint8_t i = 0; i < lm_speed_info_cnt; i++)
+    {
+        uint16_t lm_static_speed_dist;
+        /* LM_Static_Speed_Distance (15 bits) */
+        set_bits(payload, bit_index, 15, lm_static_speed_dist);
+        bit_index += 15;
+
+        uint8_t lm_static_speed_class;
+        /* LM_Static_Speed_Class (1 bit) */
+        set_bits(payload, bit_index, 1, lm_static_speed_class);
+        bit_index += 1;
+
+        /* ================= SPEED VALUES ================= */
+        if(lm_static_speed_class == 0)
+        {
+            uint8_t lm_speed_universal;
+            /* Universal Speed (6 bits) */
+            set_bits(payload, bit_index, 6, lm_speed_universal);
+            bit_index += 6;
+        }
+        else if(lm_static_speed_class == 1)
+        {
+            uint8_t lm_speed_class_a;
+            /* Class A (6 bits) */
+            set_bits(payload, bit_index, 6, lm_speed_class_a);
+            bit_index += 6;
+
+            uint8_t lm_speed_class_b;
+            /* Class B (6 bits) */
+            set_bits(payload, bit_index, 6, lm_speed_class_b);
+            bit_index += 6;
+
+            uint8_t lm_speed_class_c;
+            /* Class C (6 bits) */
+            set_bits(payload, bit_index, 6, lm_speed_class_c);
+            bit_index += 6;
+        }
+    }
+
+    if((bit_index - SSP_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - SSP_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*GP Packet Parsing*/
+    uint16_t GP_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_grad;
+    /* SUB_PKT_TYPE (GRAD) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_grad);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_grad;
+    /* SUB_PKT_LEN_GRAD (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_grad);
+    bit_index += 7;
+
+    uint8_t lm_grad_info_cnt;
+    /* LM_Grad_Info_CNT (5 bits) */
+    set_bits(payload, bit_index, 5, lm_grad_info_cnt);
+    bit_index += 5;
+
+    for(uint8_t i = 0; i < lm_grad_info_cnt; i++)
+    {
+        uint16_t lm_gradient_distance;
+        /* LM_Gradient_Distance (15 bits) */
+        set_bits(payload, bit_index, 15, lm_gradient_distance);
+        bit_index += 15;
+
+        uint8_t lm_gdir;
+        /* LM_GDIR (1 bit) */
+        set_bits(payload, bit_index, 1, lm_gdir);
+        bit_index += 1;
+
+        uint8_t lm_gradient_value;
+        /* LM_GRADIENT_VALUE (5 bits) */
+        set_bits(payload, bit_index, 5, lm_gradient_value);
+        bit_index += 5;
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - GP_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - GP_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*LCGP Packet Parsing*/
+    uint16_t LCGP_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_lc;
+    /* SUB_PKT_TYPE (LC) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_lc);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_lc;
+    /* SUB_PKT_LEN_LC (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_lc);
+    bit_index += 7;
+
+    uint8_t lm_lc_info_cnt;
+    /* LM_LC_Info_CNT (5 bits) */
+    set_bits(payload, bit_index, 5, lm_lc_info_cnt);
+    bit_index += 5;
+
+    for(uint8_t i = 0; i < lm_lc_info_cnt; i++)
+    {
+        uint16_t lm_lc_distance;
+        /* LM_LC_Distance (15 bits) */
+        set_bits(payload, bit_index, 15, lm_lc_distance);
+        bit_index += 15;
+
+        uint16_t lm_lc_id_numeric;
+        /* LM_LC_ID_Numeric (10 bits) */
+        set_bits(payload, bit_index, 10, lm_lc_id_numeric);
+        bit_index += 10;
+
+        uint8_t lm_lc_id_alpha_suffix;
+        /* Alpha suffix (3 bits) */
+        set_bits(payload, bit_index, 3, lm_lc_id_alpha_suffix);
+        bit_index += 3;
+
+        uint8_t lm_lc_manning_type;
+        /* Manning type (1 bit)*/
+        set_bits(payload, bit_index, 1, lm_lc_manning_type);
+        bit_index += 1;
+
+        uint8_t lm_lc_class;
+        /* LC class (3 bits)*/
+        set_bits(payload, bit_index, 3, lm_lc_class);
+        bit_index += 3;
+
+        uint8_t lm_lc_auto_whistle_en;
+        /* LM LC Auto whistle Enabled (1 bit)*/
+        set_bits(payload, bit_index, 1, lm_lc_auto_whistle_en);
+        bit_index += 1;
+
+        if(lm_lc_auto_whistle_en == 1)
+        {
+            uint8_t lm_lc_auto_whistle_type;
+            /* LM LC Auto whistle Type(2 bit)*/
+            set_bits(payload, bit_index, 2, lm_lc_auto_whistle_type);
+            bit_index += 2;
+        }
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - LCGP_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - LCGP_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*TSP Packet Parsing*/
+    uint16_t TSP_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_tsp;
+    /* SUB_PKT_TYPE (TSP) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_tsp);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_tsp;
+    /* SUB_PKT_LEN_TSP (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_tsp);
+    bit_index += 7;
+
+    uint8_t to_cnt;
+    /* TO_CNT (2 bits) */
+    set_bits(payload, bit_index, 2, to_cnt);
+    bit_index += 2;
+
+    for(uint8_t i = 0; i < to_cnt; i++)
+    {
+        uint8_t to_speed;
+        /* TO_SPEED (5 bits) */
+        set_bits(payload, bit_index, 5, to_speed);
+        bit_index += 5;
+
+        uint16_t diff_dist_to;
+        /* DIFF_DIST_TO (15 bits) */
+        set_bits(payload, bit_index, 15, diff_dist_to);
+        bit_index += 15;
+
+        uint16_t to_speed_rel_dist;
+        /* TO_SPEED_REL_DIST (12 bits) */
+        set_bits(payload, bit_index, 12, to_speed_rel_dist);
+        bit_index += 12;
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - TSP_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - TSP_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*TLI Packet Parsing*/
+    uint16_t TLI_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_tli;
+    /* SUB_PKT_TYPE (TLI) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_tli);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_tli;
+    /* SUB_PKT_LEN_TLI (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_tli);
+    bit_index += 7;
+
+    uint8_t dist_dup_tag;
+    /* DIST_DUP_TAG (4 bits) */
+    set_bits(payload, bit_index, 4, dist_dup_tag);
+    bit_index += 4;
+
+    uint8_t route_rfid_cnt;
+    /* ROUTE_RFID_CNT (6 bits) */
+    set_bits(payload, bit_index, 6, route_rfid_cnt);
+    bit_index += 6;
+
+//    if(route_rfid_cnt > 0)
+//        rfid_Count = 0; // used in rfid_rx.c file
+
+    for(uint8_t i = 0; i < route_rfid_cnt; i++)
+    {
+        uint16_t dist_nxt_rfid;
+        /* DIST_NXT_RFID (11 bits) */
+        set_bits(payload, bit_index, 11, dist_nxt_rfid);
+        bit_index += 11;
+
+        uint16_t nxt_rfid_tag_id;
+        /* NXT_RFID_TAG_ID (10 bits) */
+        set_bits(payload, bit_index, 10, nxt_rfid_tag_id);
+        bit_index += 10;
+
+        uint8_t dup_tag_dir;
+        /* DUP_TAG_DIR (1 bit)*/
+        set_bits(payload, bit_index, 1, dup_tag_dir);
+        bit_index += 1;
+    }
+
+    uint8_t abs_loc_reset;
+    /* ABS_LOC_RESET (1 bit)*/
+    set_bits(payload, bit_index, 1, abs_loc_reset);
+    bit_index += 1;
+
+    if(abs_loc_reset == 1)
+    {
+        uint16_t start_dist_loc_reset;
+        /* START_DIST_TO_LOC_RESET (15 bits) */
+        set_bits(payload, bit_index, 15, start_dist_loc_reset);
+        bit_index += 15;
+
+        uint8_t adj_loco_dir;
+        /* ADJ_LOCO_DIR (2 bits) */
+        set_bits(payload, bit_index, 2, adj_loco_dir);
+        bit_index += 2;
+
+        uint32_t abs_loc_correction;
+        /* ABS_LOC_CORRECTION (23 bits) */
+        set_bits(payload, bit_index, 23, abs_loc_correction);
+        bit_index += 23;
+    }
+
+    uint8_t adj_line_cnt;
+    /* ADJ_LINE_CNT (3 bits) */
+    set_bits(payload, bit_index, 3, adj_line_cnt);
+    bit_index += 3;
+
+    for(uint8_t i = 0; i <= adj_line_cnt; i++)
+    {
+        uint16_t line_tin;
+        /* LINE_TIN (9 bits) */
+        set_bits(payload, bit_index, 9, line_tin);
+        bit_index += 9;
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - TLI_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - TLI_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*TCD Packet Parsing*/
+    uint16_t TCD_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_tc;
+    /* SUB_PKT_TYPE (TC) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_tc);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_tc;
+    /* SUB_PKT_LEN_TC (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_tc);
+    bit_index += 7;
+
+    uint8_t trackcond_cnt;
+    /* TRACKCOND_CNT (4 bits) */
+    set_bits(payload, bit_index, 4, trackcond_cnt);
+    bit_index += 4;
+
+    for(uint8_t i = 0; i < trackcond_cnt; i++)
+    {
+        uint8_t trackcond_type;
+        /* TRACKCOND_TYPE (4 bits) */
+        set_bits(payload, bit_index, 4, trackcond_type);
+        bit_index += 4;
+
+        uint16_t start_dist_trackcond;
+        /* START_DIST_TRACKCOND (15 bits) */
+        set_bits(payload, bit_index, 15, start_dist_trackcond);
+        bit_index += 15;
+
+        uint16_t length_trackcond;
+        /* LENGTH_TRACKCOND (15 bits) */
+        set_bits(payload, bit_index, 15, length_trackcond);
+        bit_index += 15;
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - TCD_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - TCD_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    /*TSR Packet Parsing*/
+    uint16_t TSR_pkt_start = bit_index;
+
+    uint8_t sub_pkt_type_tsr;
+    /* SUB_PKT_TYPE (TSR) (4 bits)*/
+    set_bits(payload, bit_index, 4, sub_pkt_type_tsr);
+    bit_index += 4;
+
+    uint8_t sub_pkt_len_tsr;
+    /* SUB_PKT_LEN_TSR (7 bits) */
+    set_bits(payload, bit_index, 7, sub_pkt_len_tsr);
+    bit_index += 7;
+
+    uint8_t tsr_status;
+    /* TSR_STATUS (2 bits) */
+    set_bits(payload, bit_index, 2, tsr_status);
+    bit_index += 2;
+
+    uint8_t tsr_info_cnt;
+    /* TSR_Info_CNT (5 bits) */
+    set_bits(payload, bit_index, 5, tsr_info_cnt);
+    bit_index += 5;
+
+    for(uint8_t i = 0; i < tsr_info_cnt; i++)
+    {
+        uint8_t tsr_id;
+        /* TSR_ID (8 bits) */
+        set_bits(payload, bit_index, 8, tsr_id);
+        bit_index += 8;
+
+        uint16_t tsr_distance;
+        /* TSR_DISTANCE (15 bits) */
+        set_bits(payload, bit_index, 15, tsr_distance);
+        bit_index += 15;
+
+        uint16_t tsr_length;
+        /* TSR_LENGTH (15 bits) */
+        set_bits(payload, bit_index, 15, tsr_length);
+        bit_index += 15;
+
+        uint8_t tsr_class;
+        /* TSR_CLASS (1 bit)*/
+        set_bits(payload, bit_index, 1, tsr_class);
+        bit_index += 1;
+
+        /* SPEEDS (6 bits each)*/
+        if(tsr_class == 0)
+        {
+            uint8_t tsr_universal_speed;
+            set_bits(payload, bit_index, 6, tsr_universal_speed);
+            bit_index += 6;
+        }
+        else if(tsr_class == 1)
+        {
+            uint8_t tsr_class_a_speed;
+            set_bits(payload, bit_index, 6, tsr_class_a_speed);
+            bit_index += 6;
+
+            uint8_t tsr_class_b_speed;
+            set_bits(payload, bit_index, 6, tsr_class_b_speed);
+            bit_index += 6;
+
+            uint8_t tsr_class_c_speed;
+            set_bits(payload, bit_index, 6, tsr_class_c_speed);
+            bit_index += 6;
+        }
+
+        uint8_t tsr_info_cnt;
+        /* TSR_WHISTLE (2 bits) */
+        set_bits(payload, bit_index, 2, tsr_info_cnt);
+        bit_index += 2;
+    }
+
+    /* Padding Bits (X bits) */
+    if((bit_index - TSR_pkt_start) % 8)
+    {
+        uint8_t padding_bits = 8 - ((bit_index - TSR_pkt_start) % 8);  // Set the bits
+        /* PADDING_BITS : X bits */
+        set_bits(buf, bit_index, padding_bits, 0);
+        bit_index += padding_bits;
+    }
+
+    uint16_t payload_len = (bit_index + 7) / 8;
+    /* Insert PKT_LEN back into header */
+    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
+    return payload_len;
+}
+
+void radio_send_reg_type1(radio_id_t radio_id)
+{
+    uint8_t can_frame[8];
+    radio_ctx.payload_len = radio_build_reg_type1_payload(radio_ctx.payload);
+    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
+    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
+        return;
+
+    uint8_t i; // Loop runs 5 times (for 5 frames)
+    for ( i = 0; i < radio_ctx.seq_total; i++)
+    {
+        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE1,radio_ctx.seq_total,i);
+        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+    }
+    radio_info_ack_tx_done();
 }
 
 uint8_t radio_parse_reg_type1(const uint8_t *p, uint16_t len, radio_reg_type1_t *out)
