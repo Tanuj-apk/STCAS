@@ -104,7 +104,7 @@ void setupPLL(void)
                         |  (uint32)((uint32)0x1FU << 24U)
                         |  (uint32)0x00000000U
                         |  (uint32)((uint32)(6U - 1U)<< 16U)
-                        |  (uint32)(0x7700U);
+                        |  (uint32)(0x9F00U);
 
     /**   - Setup pll control register 2
     *     - Setup spreading rate

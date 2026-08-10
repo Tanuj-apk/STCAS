@@ -108,7 +108,7 @@ enum systemClockSource
 *
 *   Oscillator clock source exported from HALCoGen GUI
 */
-#define OSC_FREQ     16.0F
+#define OSC_FREQ     12.0F
 
 /** @def PLL1_FREQ
 *   @brief PLL 1 clock source exported from HALCoGen GUI
@@ -136,7 +136,7 @@ enum systemClockSource
 *
 *   PLL 2 clock source exported from HALCoGen GUI
 */
-#define PLL2_FREQ    160.00F
+#define PLL2_FREQ    120.00F
 
 /** @def GCLK_FREQ
 *   @brief GCLK domain frequency exported from HALCoGen GUI
@@ -337,7 +337,7 @@ typedef struct system_config_reg
                                     | (uint32)((uint32)0x1FU << 24U) \
                                     | (uint32)0x00000000U \
                                     | (uint32)((uint32)(6U - 1U)<< 16U)\
-                                    | (uint32)(0x7700U))
+                                    | (uint32)(0x9F00U))
                                     
 #define SYS_PLLCTL1_CONFIGVALUE_2   (((SYS_PLLCTL1_CONFIGVALUE_1) & 0xE0FFFFFFU) | (uint32)((uint32)(1U - 1U) << 24U))
                                     

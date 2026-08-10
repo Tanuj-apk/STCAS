@@ -71,6 +71,7 @@
 #include "sys_common.h"
 #include "system.h"
 #include "input_card.h"
+#include "SMOCIP.h"
 //#include "BIUController.h"
 /* USER CODE END */
 
@@ -241,6 +242,13 @@ void KavachInit(void)
     can_manager_init();
 
     start_rtc_write = 1;
+
+    //! For testing SMOCIP Tx
+    smocip_build_payload();
+
+    smocip_send_can(0);
+    smocip_send_can(1);
+    smocip_send_can(2);
 
     //BIU Check
 //    BIU_Init();
