@@ -24,17 +24,17 @@ uint16_t current_sample_index = 0U;
 volatile uint32_t tlm_tod_sec = 0U;
 volatile uint32_t tlm_tod_ms = 0U;
 
-static uint32_t tlm_start_distance = 0U;
-static uint32_t tlm_end_distance = 0U;
+//static uint32_t tlm_start_distance = 0U;
+//static uint32_t tlm_end_distance = 0U;
 
 uint32_t calculated_train_length = 0U;
 
-static uint8_t tlm_start_valid = 0U;
+//static uint8_t tlm_start_valid = 0U;
 
-static void radio_process_tlm_type1(void);
-static void radio_process_tlm_type2(void);
+//static void radio_process_tlm_type1(void);
+//static void radio_process_tlm_type2(void);
 
-static float radio_get_tlm_distance(uint32_t event_sec, uint32_t event_ms);
+//static float radio_get_tlm_distance(uint32_t event_sec, uint32_t event_ms);
 
 static uint8_t tlm_active = 0;
 
@@ -52,7 +52,7 @@ typedef struct
 static info_ack_event_t info_ack_queue[INFO_ACK_QUEUE_SIZE];
 
 static uint8_t info_ack_head = 0;
-static uint8_t info_ack_tail = 0;
+//static uint8_t info_ack_tail = 0;
 static uint8_t info_ack_count = 0;
 
 typedef enum
@@ -72,68 +72,6 @@ typedef enum
   INFO_ACK_UNUSUAL_STOPPAGE = 12,
   INFO_ACK_MANUAL_SOS = 13
 } InfoAck_t;
-
-static void radio_info_ack_push(uint8_t ack_code)
-{
-    if (info_ack_count >= INFO_ACK_QUEUE_SIZE)
-    {
-        return; // Queue full
-    }
-
-    info_ack_queue[info_ack_tail].ack_code = ack_code;
-    info_ack_queue[info_ack_tail].repeat_count = INFO_ACK_REPEAT_COUNT;
-    info_ack_queue[info_ack_tail].persistent = 0;
-
-    if (ack_code == INFO_ACK_TLM_START)
-    {
-      info_ack_queue[info_ack_tail].persistent = 1;
-    }
-
-    info_ack_tail = (info_ack_tail + 1) % INFO_ACK_QUEUE_SIZE;
-    info_ack_count++;
-}
-
-static uint8_t radio_info_ack_get_current(void)
-{
-    if (info_ack_count == 0)
-    {
-        return INFO_ACK_NONE;
-    }
-
-    return info_ack_queue[info_ack_head].ack_code;
-}
-
-static void radio_info_ack_tx_done(void)
-{
-    if (info_ack_count == 0)
-    {
-        return;
-    }
-
-    if (info_ack_queue[info_ack_head].repeat_count > 0)
-    {
-        info_ack_queue[info_ack_head].repeat_count--;
-    }
-
-    if (info_ack_queue[info_ack_head].repeat_count == 0)
-    {
-        uint8_t remove_event = 1;
-        if(info_ack_queue[info_ack_head].persistent)
-        {
-            if(tlm_active)
-            {
-                remove_event = 0;
-            }
-        }
-
-        if(remove_event)
-        {
-            info_ack_head = (info_ack_head + 1) % INFO_ACK_QUEUE_SIZE;
-            info_ack_count--;
-        }
-    }
-}
-//!=========== Info Ack implementation End =================
 
 /* ================= INTERNAL PROTOTYPES ================= */
 static void radio_process_complete_packet(void);
@@ -157,10 +95,10 @@ uint32_t ref_odo = 4200;   // meters (example)
 #define EOA_MARGIN 30
 /* Distance travelled */
 int32_t distance_travelled;
-static int32_t prev_ma_type1 = 0;
-static uint8_t prev_ma_valid_type1 = 0;
-static int32_t prev_ma_type2 = 0;
-static uint8_t prev_ma_valid_type2 = 0;
+//static int32_t prev_ma_type1 = 0;
+//static uint8_t prev_ma_valid_type1 = 0;
+//static int32_t prev_ma_type2 = 0;
+//static uint8_t prev_ma_valid_type2 = 0;
 
 uint32_t last_osma_rx_time = 0;
 uint8_t osma_active = 0;
@@ -184,7 +122,7 @@ typedef struct
     uint8_t  mac[4];
 } radio_aap_t;
 
-static radio_aap_t g_aap;
+//static radio_aap_t g_aap;
 
 typedef struct
 {
@@ -198,7 +136,7 @@ typedef struct
     uint32_t crc;
 } radio_aep_t;
 
-static radio_aep_t g_aep;
+//static radio_aep_t g_aep;
 
 typedef struct
 {
@@ -265,6 +203,86 @@ radio_reg_type1_t reg_type1;
 radio_reg_type2_t reg_type2;
 
 uint16_t index_var;
+
+/* ================= INTERNAL HELPERS ================= */
+uint32_t get_bits(const uint8_t *buf, uint16_t bit, uint8_t len)
+{
+
+    uint32_t val = 0;
+    for (uint8_t i = 0; i < len; i++)
+    {
+        uint16_t b = bit + i;
+        uint8_t byte = b >> 3;           // Which byte: b / 8
+        uint8_t shift = 7 - (b & 7);    // MSB: 7 - (b % 8)
+
+        if (buf[byte] & (1U << shift))
+            val |= (1U << (len - 1 - i));  // MSB-first bit ordering in result
+    }
+    index_var += len;
+    return val;
+}
+
+//static void radio_info_ack_push(uint8_t ack_code)
+//{
+//    if (info_ack_count >= INFO_ACK_QUEUE_SIZE)
+//    {
+//        return; // Queue full
+//    }
+//
+//    info_ack_queue[info_ack_tail].ack_code = ack_code;
+//    info_ack_queue[info_ack_tail].repeat_count = INFO_ACK_REPEAT_COUNT;
+//    info_ack_queue[info_ack_tail].persistent = 0;
+//
+//    if (ack_code == INFO_ACK_TLM_START)
+//    {
+//      info_ack_queue[info_ack_tail].persistent = 1;
+//    }
+//
+//    info_ack_tail = (info_ack_tail + 1) % INFO_ACK_QUEUE_SIZE;
+//    info_ack_count++;
+//}
+
+//static uint8_t radio_info_ack_get_current(void)
+//{
+//    if (info_ack_count == 0)
+//    {
+//        return INFO_ACK_NONE;
+//    }
+//
+//    return info_ack_queue[info_ack_head].ack_code;
+//}
+
+static void radio_info_ack_tx_done(void)
+{
+    if (info_ack_count == 0)
+    {
+        return;
+    }
+
+    if (info_ack_queue[info_ack_head].repeat_count > 0)
+    {
+        info_ack_queue[info_ack_head].repeat_count--;
+    }
+
+    if (info_ack_queue[info_ack_head].repeat_count == 0)
+    {
+        uint8_t remove_event = 1;
+        if(info_ack_queue[info_ack_head].persistent)
+        {
+            if(tlm_active)
+            {
+                remove_event = 0;
+            }
+        }
+
+        if(remove_event)
+        {
+            info_ack_head = (info_ack_head + 1) % INFO_ACK_QUEUE_SIZE;
+            info_ack_count--;
+        }
+    }
+}
+//!=========== Info Ack implementation End =================
 
 /* ================= TX: ARP ================= */
 //? Builds ARP payload
@@ -759,24 +777,6 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
     }
 }
 
-/* ================= INTERNAL HELPERS ================= */
-uint32_t get_bits(const uint8_t *buf, uint16_t bit, uint8_t len)
-{
-
-    uint32_t val = 0;
-    for (uint8_t i = 0; i < len; i++)
-    {
-        uint16_t b = bit + i;
-        uint8_t byte = b >> 3;           // Which byte: b / 8
-        uint8_t shift = 7 - (b & 7);    // MSB: 7 - (b % 8)
-
-        if (buf[byte] & (1U << shift))
-            val |= (1U << (len - 1 - i));  // MSB-first bit ordering in result
-    }
-    index_var += len;
-    return val;
-}
-
 // static uint8_t radio_validate_crc(const uint8_t *p,
 //                                   uint16_t len,
 //                                   uint32_t expected_crc)
@@ -849,44 +849,41 @@ static uint8_t radio_build_aap_payload(uint8_t *buf)
      * FRAME 1  ? payload[6–11]
      * ========================================================= */
     uint8_t source_stn_version = KAVACH_VERSION_4_0;
-
     /* SOURCE_LOCO_VERSION : 3 bits */
     set_bits(buf, bit_index, 3, source_stn_version);
     bit_index += 3;
 
     uint32_t stn_abs_loc = 0/*radio_get_latest_abs_loc()*/;  //Temp set to 0 TO DO: add variable that will be hardcoded to a certain value
-
     /* ABS_LOCO_LOC : 23 bits */
     set_bits(buf, bit_index, 23, stn_abs_loc);
     bit_index += 23;
 
-    uint32_t dest_loco_id /*= g_my_loco_id*/;
-
+    uint32_t dest_loco_id = 0 /*= g_my_loco_id*/;
     /* DEST_LOCO_ID : 20 bits */
     set_bits(payload, bit_index, 20, dest_loco_id);
     bit_index += 20;
 
-    uint16_t alloted_uplink_freq;  // Set the freq
+    uint16_t alloted_uplink_freq = 0;  // Set the freq
     /* ALLOTED_UPLINK_FREQ : 12 bits */
     set_bits(buf, bit_index, 12, alloted_uplink_freq);
     bit_index += 12;
 
-    uint16_t alloted_downlink_freq;  // Set the freq
+    uint16_t alloted_downlink_freq = 0;  // Set the freq
     /* ALLOTED_DOWNLINK_FREQ : 12 bits */
     set_bits(buf, bit_index, 12, alloted_downlink_freq);
     bit_index += 12;
 
-    uint8_t alloted_TDMA_timeslot;  // Set the timeslot
+    uint8_t alloted_TDMA_timeslot = 0;  // Set the timeslot
     /* ALLOTED_TDMA_TIMESLOT : 7 bits */
     set_bits(buf, bit_index, 7, alloted_TDMA_timeslot);
     bit_index += 7;
 
-    uint16_t stn_rnd_num_rs;  // Set the num
+    uint16_t stn_rnd_num_rs = 0;  // Set the num
     /* STATION_RND_NUM_RS : 16 bits */
     set_bits(buf, bit_index, 16, stn_rnd_num_rs);
     bit_index += 16;
 
-    uint8_t stn_TDMA;  // Set the timeslot
+    uint8_t stn_TDMA = 0;  // Set the timeslot
     /* STATION_TDMA : 7 bits */
     set_bits(buf, bit_index, 7, stn_TDMA);
     bit_index += 7;
@@ -1009,231 +1006,231 @@ void radio_send_aep(radio_id_t radio_id)
     radio_info_ack_tx_done();
 }
 
-static uint8_t radio_is_track_profile_valid(void)
-{
-    /* ===== MA ===== */
-    if(reg_type1.MA_Packet_reg_type1.sub_pkt_type == 0 ||
-            reg_type1.MA_Packet_reg_type1.sub_pkt_len  == 0)
-        return 0;
+//static uint8_t radio_is_track_profile_valid(void)
+//{
+//    /* ===== MA ===== */
+//    if(reg_type1.MA_Packet_reg_type1.sub_pkt_type == 0 ||
+//            reg_type1.MA_Packet_reg_type1.sub_pkt_len  == 0)
+//        return 0;
+//
+//    /* ===== SSP ===== */
+//    if(reg_type1.SSP_Packet_reg_type1.sub_pkt_type_ssp == 0 ||
+//            reg_type1.SSP_Packet_reg_type1.sub_pkt_len_ssp  == 0)
+//        return 0;
+//
+//    /* ===== GP ===== */
+//    if(reg_type1.GP_Packet_reg_type1.sub_pkt_type_grad == 0 ||
+//            reg_type1.GP_Packet_reg_type1.sub_pkt_len_grad  == 0)
+//        return 0;
+//
+//    /* ===== LCGP ===== */
+//    if(reg_type1.LCGP_Packet_reg_type1.sub_pkt_type_lc == 0 ||
+//            reg_type1.LCGP_Packet_reg_type1.sub_pkt_len_lc  == 0)
+//        return 0;
+//
+//    /* ===== TSP ===== */
+//    if(reg_type1.TSP_Packet_reg_type1.sub_pkt_type_tsp == 0 ||
+//            reg_type1.TSP_Packet_reg_type1.sub_pkt_len_tsp  == 0)
+//        return 0;
+//
+//    /* ===== TLI ===== */
+//    if(reg_type1.TLI_Packet_reg_type1.sub_pkt_type_tli == 0 ||
+//            reg_type1.TLI_Packet_reg_type1.sub_pkt_len_tli  == 0)
+//        return 0;
+//
+//    /* ===== TCD ===== */
+//    if(reg_type1.TCD_Packet_reg_type1.sub_pkt_type_tc == 0 ||
+//            reg_type1.TCD_Packet_reg_type1.sub_pkt_len_tc  == 0)
+//        return 0;
+//
+//    /* ===== TSR ===== */
+//    if(reg_type1.TSR_Packet_reg_type1.sub_pkt_type_tsr == 0 ||
+//            reg_type1.TSR_Packet_reg_type1.sub_pkt_len_tsr  == 0)
+//        return 0;
+//
+//    return 1;
+//}
 
-    /* ===== SSP ===== */
-    if(reg_type1.SSP_Packet_reg_type1.sub_pkt_type_ssp == 0 ||
-            reg_type1.SSP_Packet_reg_type1.sub_pkt_len_ssp  == 0)
-        return 0;
+//static float radio_get_tlm_distance(uint32_t event_sec, uint32_t event_ms)
+//{
+//    dist_array_t *match = NULL;
+//
+//    uint32_t normalized_ms;
+//
+//    uint16_t lower_index = 0U;
+//    uint16_t upper_index = 0U;
+//
+//    float d1;
+//    float d2;
+//
+//    uint32_t t1;
+//    uint32_t t2;
+//
+//    float interpolated_distance;
+//
+//    uint8_t sec_index;
+//
+//    for (uint8_t i = 0U; i < TLM_HISTORY_SECONDS; i++)
+//    {
+//        if (distance_db[i].tod_sec == event_sec)
+//        {
+//            match = &distance_db[i];
+//            sec_index = i;
+//            break;
+//        }
+//    }
+//
+//    if (match == NULL)
+//        return 0U;
+//
+//    normalized_ms = (event_ms * (match->tod_ms[match->sec_span_ms])) / 1000U;
+//
+//    if(match->tod_ms[0] > normalized_ms)
+//    {
+//        d1 = distance_db[sec_index - 1].distance_odo[(distance_db[sec_index - 1].sec_span_ms) - 1];
+//        d2 = distance_db[sec_index].distance_odo[0];
+//
+//        t1 = distance_db[sec_index - 1].tod_ms[(distance_db[sec_index - 1].sec_span_ms) - 1];
+//        t2 = distance_db[sec_index].tod_ms[0];
+//    }
+//    else if(normalized_ms > match->tod_ms[(match->sec_span_ms) - 1])
+//    {
+//        d1 = distance_db[sec_index].distance_odo[(distance_db[sec_index].sec_span_ms) - 1];
+//        d2 = distance_db[sec_index + 1].distance_odo[0];
+//
+//        t1 = distance_db[sec_index].tod_ms[(distance_db[sec_index].sec_span_ms) - 1];
+//        t2 = distance_db[sec_index + 1].tod_ms[0];
+//    }
+//    else
+//    {
+//        for(uint16_t i = 0U; i < ( match->sec_span_ms - 1U); i++)
+//        {
+//            //Valid for event_ms range 10ms and 990ms - Not valid for event_ms ~= 0ms and event_ms ~= 1000ms
+//            if(match->tod_ms[i] == normalized_ms)
+//            {
+//                lower_index = i;
+//                upper_index = i;
+//                break;
+//            }
+//            else if(match->tod_ms[i + 1U] == normalized_ms)
+//            {
+//                lower_index = i + 1U;
+//                upper_index = i + 1U;
+//                break;
+//            }
+//            else if ((match->tod_ms[i] < normalized_ms) && (normalized_ms < match->tod_ms[i + 1U]))
+//            {
+//                lower_index = i;
+//                upper_index = i + 1U;
+//                break;
+//            }
+//        }
+//
+//        d1 = match->distance_odo[lower_index];
+//        d2 = match->distance_odo[upper_index];
+//
+//        t1 = match->tod_ms[lower_index];
+//        t2 = match->tod_ms[upper_index];
+//    }
+//
+//    if (t2 == t1)
+//        return d1;
+//
+//    interpolated_distance = d1 + (((normalized_ms - t1) * (d2 - d1)) / (t2 - t1));
+//
+//    return interpolated_distance;
+//}
 
-    /* ===== GP ===== */
-    if(reg_type1.GP_Packet_reg_type1.sub_pkt_type_grad == 0 ||
-            reg_type1.GP_Packet_reg_type1.sub_pkt_len_grad  == 0)
-        return 0;
+//static void radio_process_tlm_type1(void)
+//{
+//    uint32_t event_sec;
+//    uint32_t event_ms;
+//
+//    float interpolated_distance;
+//
+//    if (reg_type1.MA_Packet_reg_type1.trn_len_info_sts != 1U)
+//    {
+//        return;
+//    }
+//
+//    event_sec = (reg_type1.MA_Packet_reg_type1.ref_frame_num_tlm - 1U);
+//
+//    event_ms = reg_type1.MA_Packet_reg_type1.ref_offset_int_tlm * 10U;
+//
+//    interpolated_distance = radio_get_tlm_distance(event_sec, event_ms);
+//
+//    /* START */
+//    if (reg_type1.MA_Packet_reg_type1.trn_len_info_type == 0U)
+//    {
+//        tlm_start_distance = interpolated_distance;
+//
+//        tlm_start_valid = 1U;
+//
+//        tlm_active = 1;
+//
+//        radio_info_ack_push(INFO_ACK_TLM_START);
+//    }
+//    else
+//    {
+//        /* END */
+//
+//        if (tlm_start_valid == 1U)
+//        {
+//            tlm_end_distance = interpolated_distance;
+//
+//            if (tlm_end_distance > tlm_start_distance)
+//            {
+//                calculated_train_length = tlm_end_distance - tlm_start_distance;
+//            }
+//
+//            tlm_start_valid = 0U;
+//
+//            tlm_active = 0;
+//
+//            radio_info_ack_push(INFO_ACK_TLM_END);
+//        }
+//    }
+//}
 
-    /* ===== LCGP ===== */
-    if(reg_type1.LCGP_Packet_reg_type1.sub_pkt_type_lc == 0 ||
-            reg_type1.LCGP_Packet_reg_type1.sub_pkt_len_lc  == 0)
-        return 0;
-
-    /* ===== TSP ===== */
-    if(reg_type1.TSP_Packet_reg_type1.sub_pkt_type_tsp == 0 ||
-            reg_type1.TSP_Packet_reg_type1.sub_pkt_len_tsp  == 0)
-        return 0;
-
-    /* ===== TLI ===== */
-    if(reg_type1.TLI_Packet_reg_type1.sub_pkt_type_tli == 0 ||
-            reg_type1.TLI_Packet_reg_type1.sub_pkt_len_tli  == 0)
-        return 0;
-
-    /* ===== TCD ===== */
-    if(reg_type1.TCD_Packet_reg_type1.sub_pkt_type_tc == 0 ||
-            reg_type1.TCD_Packet_reg_type1.sub_pkt_len_tc  == 0)
-        return 0;
-
-    /* ===== TSR ===== */
-    if(reg_type1.TSR_Packet_reg_type1.sub_pkt_type_tsr == 0 ||
-            reg_type1.TSR_Packet_reg_type1.sub_pkt_len_tsr  == 0)
-        return 0;
-
-    return 1;
-}
-
-static float radio_get_tlm_distance(uint32_t event_sec, uint32_t event_ms)
-{
-    dist_array_t *match = NULL;
-
-    uint32_t normalized_ms;
-
-    uint16_t lower_index = 0U;
-    uint16_t upper_index = 0U;
-
-    float d1;
-    float d2;
-
-    uint32_t t1;
-    uint32_t t2;
-
-    float interpolated_distance;
-
-    uint8_t sec_index;
-
-    for (uint8_t i = 0U; i < TLM_HISTORY_SECONDS; i++)
-    {
-        if (distance_db[i].tod_sec == event_sec)
-        {
-            match = &distance_db[i];
-            sec_index = i;
-            break;
-        }
-    }
-
-    if (match == NULL)
-        return 0U;
-
-    normalized_ms = (event_ms * (match->tod_ms[match->sec_span_ms])) / 1000U;
-
-    if(match->tod_ms[0] > normalized_ms)
-    {
-        d1 = distance_db[sec_index - 1].distance_odo[(distance_db[sec_index - 1].sec_span_ms) - 1];
-        d2 = distance_db[sec_index].distance_odo[0];
-
-        t1 = distance_db[sec_index - 1].tod_ms[(distance_db[sec_index - 1].sec_span_ms) - 1];
-        t2 = distance_db[sec_index].tod_ms[0];
-    }
-    else if(normalized_ms > match->tod_ms[(match->sec_span_ms) - 1])
-    {
-        d1 = distance_db[sec_index].distance_odo[(distance_db[sec_index].sec_span_ms) - 1];
-        d2 = distance_db[sec_index + 1].distance_odo[0];
-
-        t1 = distance_db[sec_index].tod_ms[(distance_db[sec_index].sec_span_ms) - 1];
-        t2 = distance_db[sec_index + 1].tod_ms[0];
-    }
-    else
-    {
-        for(uint16_t i = 0U; i < ( match->sec_span_ms - 1U); i++)
-        {
-            //Valid for event_ms range 10ms and 990ms - Not valid for event_ms ~= 0ms and event_ms ~= 1000ms
-            if(match->tod_ms[i] == normalized_ms)
-            {
-                lower_index = i;
-                upper_index = i;
-                break;
-            }
-            else if(match->tod_ms[i + 1U] == normalized_ms)
-            {
-                lower_index = i + 1U;
-                upper_index = i + 1U;
-                break;
-            }
-            else if ((match->tod_ms[i] < normalized_ms) && (normalized_ms < match->tod_ms[i + 1U]))
-            {
-                lower_index = i;
-                upper_index = i + 1U;
-                break;
-            }
-        }
-
-        d1 = match->distance_odo[lower_index];
-        d2 = match->distance_odo[upper_index];
-
-        t1 = match->tod_ms[lower_index];
-        t2 = match->tod_ms[upper_index];
-    }
-
-    if (t2 == t1)
-        return d1;
-
-    interpolated_distance = d1 + (((normalized_ms - t1) * (d2 - d1)) / (t2 - t1));
-
-    return interpolated_distance;
-}
-
-static void radio_process_tlm_type1(void)
-{
-    uint32_t event_sec;
-    uint32_t event_ms;
-
-    float interpolated_distance;
-
-    if (reg_type1.MA_Packet_reg_type1.trn_len_info_sts != 1U)
-    {
-        return;
-    }
-
-    event_sec = (reg_type1.MA_Packet_reg_type1.ref_frame_num_tlm - 1U);
-
-    event_ms = reg_type1.MA_Packet_reg_type1.ref_offset_int_tlm * 10U;
-
-    interpolated_distance = radio_get_tlm_distance(event_sec, event_ms);
-
-    /* START */
-    if (reg_type1.MA_Packet_reg_type1.trn_len_info_type == 0U)
-    {
-        tlm_start_distance = interpolated_distance;
-
-        tlm_start_valid = 1U;
-
-        tlm_active = 1;
-
-        radio_info_ack_push(INFO_ACK_TLM_START);
-    }
-    else
-    {
-        /* END */
-
-        if (tlm_start_valid == 1U)
-        {
-            tlm_end_distance = interpolated_distance;
-
-            if (tlm_end_distance > tlm_start_distance)
-            {
-                calculated_train_length = tlm_end_distance - tlm_start_distance;
-            }
-
-            tlm_start_valid = 0U;
-
-            tlm_active = 0;
-
-            radio_info_ack_push(INFO_ACK_TLM_END);
-        }
-    }
-}
-
-static void radio_process_tlm_type2(void)
-{
-    uint32_t event_sec;
-    uint32_t event_ms;
-    uint32_t interpolated_distance;
-
-    if (reg_type2.MA_Packet_reg_type2.trn_len_info_sts != 1U)
-    {
-        return;
-    }
-
-    event_sec = (reg_type2.MA_Packet_reg_type2.ref_frame_num_tlm - 1U) / 2U;
-    event_ms = reg_type2.MA_Packet_reg_type2.ref_offset_int_tlm * 10U;
-    interpolated_distance = radio_get_tlm_distance(event_sec, event_ms);
-    if (reg_type2.MA_Packet_reg_type2.trn_len_info_type == 0U)
-    {
-        tlm_start_distance = interpolated_distance;
-
-        tlm_start_valid = 1U;
-
-        tlm_active = 1;
-
-        radio_info_ack_push(INFO_ACK_TLM_START);
-    }
-    else
-    {
-        if (tlm_start_valid == 1U)
-        {
-            tlm_end_distance = interpolated_distance;
-            if (tlm_end_distance > tlm_start_distance)
-            {
-                calculated_train_length = tlm_end_distance - tlm_start_distance;
-            }
-            tlm_start_valid = 0U;
-            tlm_active = 0;
-            radio_info_ack_push(INFO_ACK_TLM_END);
-        }
-    }
-}
+//static void radio_process_tlm_type2(void)
+//{
+//    uint32_t event_sec;
+//    uint32_t event_ms;
+//    uint32_t interpolated_distance;
+//
+//    if (reg_type2.MA_Packet_reg_type2.trn_len_info_sts != 1U)
+//    {
+//        return;
+//    }
+//
+//    event_sec = (reg_type2.MA_Packet_reg_type2.ref_frame_num_tlm - 1U) / 2U;
+//    event_ms = reg_type2.MA_Packet_reg_type2.ref_offset_int_tlm * 10U;
+//    interpolated_distance = radio_get_tlm_distance(event_sec, event_ms);
+//    if (reg_type2.MA_Packet_reg_type2.trn_len_info_type == 0U)
+//    {
+//        tlm_start_distance = interpolated_distance;
+//
+//        tlm_start_valid = 1U;
+//
+//        tlm_active = 1;
+//
+//        radio_info_ack_push(INFO_ACK_TLM_START);
+//    }
+//    else
+//    {
+//        if (tlm_start_valid == 1U)
+//        {
+//            tlm_end_distance = interpolated_distance;
+//            if (tlm_end_distance > tlm_start_distance)
+//            {
+//                calculated_train_length = tlm_end_distance - tlm_start_distance;
+//            }
+//            tlm_start_valid = 0U;
+//            tlm_active = 0;
+//            radio_info_ack_push(INFO_ACK_TLM_END);
+//        }
+//    }
+//}
 
 uint8_t result;
 static void radio_process_complete_packet(void)
@@ -1304,32 +1301,31 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
      * FRAME 1  ? payload[6–11]
      * ========================================================= */
     uint8_t source_stn_version = KAVACH_VERSION_4_0;
-
     /* SOURCE_LOCO_VERSION : 3 bits */
     set_bits(buf, bit_index, 3, source_stn_version);
     bit_index += 3;
 
-    uint32_t dest_loco_id /*= g_my_loco_id*/;
+    uint32_t dest_loco_id = 0 /*= g_my_loco_id*/;
     /* DEST_LOCO_ID : 20 bits */
     set_bits(payload, bit_index, 20, dest_loco_id);
     bit_index += 20;
 
-    uint8_t ref_prof_id /*= g_my_loco_id*/;
+    uint8_t ref_prof_id = 0 /*= g_my_loco_id*/;
     /* REF_PROF_ID (4 bits) */
     set_bits(payload, bit_index, 4, ref_prof_id);
     bit_index += 4;
 
-    uint16_t last_ref_rfid /*= g_my_loco_id*/;
+    uint16_t last_ref_rfid = 0 /*= g_my_loco_id*/;
     /* LAST_REF_RFID (10 bits) */
-    set_bits(payload, bit_index, 10, ref_prof_id);
+    set_bits(payload, bit_index, 10, last_ref_rfid);
     bit_index += 10;
 
-    uint16_t dist_pkt_start /*= g_my_loco_id*/;
+    uint16_t dist_pkt_start = 0 /*= g_my_loco_id*/;
     /* DIST_PKT_START (15 bits) */
-    set_bits(payload, bit_index, 15, ref_prof_id);
+    set_bits(payload, bit_index, 15, dist_pkt_start);
     bit_index += 15;
 
-    uint8_t pkt_dir /*= g_my_loco_id*/;
+    uint8_t pkt_dir = 0 /*= g_my_loco_id*/;
     /* PKT_DIR (2 bits) */
     set_bits(payload, bit_index, 2, pkt_dir);
     bit_index += 2;
@@ -1346,47 +1342,47 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     set_bits(payload, bit_index, 4, sub_pkt_type);
     bit_index += 4;
 
-    uint8_t sub_pkt_len /*= g_my_loco_id*/;
+    uint8_t sub_pkt_len = 0 /*= g_my_loco_id*/;
     /* SUB_PKT_LEN (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len);
     bit_index += 7;
 
-    uint8_t frame_offset /*= g_my_loco_id*/;
+    uint8_t frame_offset = 0 /*= g_my_loco_id*/;
     /* FRAME_OFFSET (4 bits) */
     set_bits(payload, bit_index, 4, frame_offset);
     bit_index += 4;
 
-    uint8_t dest_loco_sos /*= g_my_loco_id*/;
+    uint8_t dest_loco_sos = 0 /*= g_my_loco_id*/;
     /* DEST_LOCO_SOS (1 + 3 = 4 bits) */
     set_bits(payload, bit_index, 4, dest_loco_sos);
     bit_index += 4;
 
-    uint8_t train_section_type /*= g_my_loco_id*/;
+    uint8_t train_section_type = 0 /*= g_my_loco_id*/;
     /* TRAIN_SECTION_TYPE (2 bits) */
     set_bits(payload, bit_index, 2, train_section_type);
     bit_index += 2;
 
-    uint32_t cur_sig_info /*= g_my_loco_id*/;
+    uint32_t cur_sig_info = 0 /*= g_my_loco_id*/;
     /* ================= CUR_SIG_INFO (17 bits) ================= */
     set_bits(payload, bit_index, 17, cur_sig_info);
     bit_index += 17;
 
-    uint8_t cur_sig_aspect /*= g_my_loco_id*/;
+    uint8_t cur_sig_aspect = 0 /*= g_my_loco_id*/;
     /* CUR_SIG_ASPECT (complete 2 + 4 = 6 bits) */
     set_bits(payload, bit_index, 6, cur_sig_aspect);
     bit_index += 6;
 
-    uint8_t next_sig_aspect /*= g_my_loco_id*/;
+    uint8_t next_sig_aspect = 0 /*= g_my_loco_id*/;
     /* NEXT_SIG_ASPECT (4 + 2 = 6 bits) */
     set_bits(payload, bit_index, 6, next_sig_aspect);
     bit_index += 6;
 
-    uint16_t appr_sig_dist /*= g_my_loco_id*/;
+    uint16_t appr_sig_dist = 0 /*= g_my_loco_id*/;
     /* APPR_SIG_DIST (6 + 8 + 1 = 15 bits) */
-    set_bits(payload, bit_index, 15, next_sig_aspect);
+    set_bits(payload, bit_index, 15, appr_sig_dist);
     bit_index += 15;
 
-    uint8_t authority_type /*= g_my_loco_id*/;
+    uint8_t authority_type = 0 /*= g_my_loco_id*/;
     /* AUTHORITY_TYPE (2 bits) */
     set_bits(payload, bit_index, 2, authority_type);
     bit_index += 2;
@@ -1394,17 +1390,17 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /* AUTHORIZED_SPEED (6 bits) */
     if(authority_type == 1)
     {
-        uint8_t authorized_speed /*= g_my_loco_id*/;
+        uint8_t authorized_speed = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 6, authorized_speed);
         bit_index += 6;
     }
 
-    uint16_t ma_wrt_sig /*= g_my_loco_id*/;
+    uint16_t ma_wrt_sig = 0 /*= g_my_loco_id*/;
     /* MA_W_R_T_SIG (16 bits) */
     set_bits(payload, bit_index, 16, ma_wrt_sig);
     bit_index += 16;
 
-    uint8_t req_shorten_ma /*= g_my_loco_id*/;
+    uint8_t req_shorten_ma = 0 /*= g_my_loco_id*/;
     /* REQ_SHORTEN_MA (1 bit) */
     set_bits(payload, bit_index, 1, req_shorten_ma);
     bit_index += 1;
@@ -1412,35 +1408,35 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /* NEW_MA (16 bits) */
     if(req_shorten_ma == 1)
     {
-        uint16_t new_ma /*= g_my_loco_id*/;
+        uint16_t new_ma = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 16, new_ma);
         bit_index += 16;
     }
 
-    uint8_t trn_len_info_sts /*= g_my_loco_id*/;
+    uint8_t trn_len_info_sts = 0 /*= g_my_loco_id*/;
     /* TRAIN_LENGTH_INFO_STS (1 bit)*/
     set_bits(payload, bit_index, 1, trn_len_info_sts);
     bit_index += 1;
 
     if(trn_len_info_sts == 1)
     {
-        uint8_t trn_len_info_type /*= g_my_loco_id*/;
+        uint8_t trn_len_info_type = 0 /*= g_my_loco_id*/;
         /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
         set_bits(payload, bit_index, 1, trn_len_info_type);
         bit_index += 1;
 
-        uint32_t ref_frame_num_tlm /*= g_my_loco_id*/;
+        uint32_t ref_frame_num_tlm = 0 /*= g_my_loco_id*/;
         /* REF_FRAME_NUM_TLM (17 bits) */
         set_bits(payload, bit_index, 17, ref_frame_num_tlm);
         bit_index += 17;
 
-        uint8_t ref_offset_int_tlm /*= g_my_loco_id*/;
+        uint8_t ref_offset_int_tlm = 0 /*= g_my_loco_id*/;
         /* REF_OFFSET_INT_TLM (8 bits) */
         set_bits(payload, bit_index, 8, ref_offset_int_tlm);
         bit_index += 8;
     }
 
-    uint8_t next_stn_comm /*= g_my_loco_id*/;
+    uint8_t next_stn_comm = 0 /*= g_my_loco_id*/;
     /* NEXT_STN_COMM (1 bit) */
     set_bits(payload, bit_index, 1, next_stn_comm);
     bit_index += 1;
@@ -1449,7 +1445,7 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /* APPR_STN_ID (16 bits) */
     if(next_stn_comm == 1)
     {
-        uint16_t appr_stn_id /*= g_my_loco_id*/;
+        uint16_t appr_stn_id = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 16, appr_stn_id);
         bit_index += 16;
     }
@@ -1465,29 +1461,29 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*SSP Packet Parsing*/
     uint16_t SSP_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_ssp;
+    uint8_t sub_pkt_type_ssp = 0;
     /* SUB_PKT_TYPE (SSP) (4 bits) */
     set_bits(payload, bit_index, 4, sub_pkt_type_ssp);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_ssp;
+    uint8_t sub_pkt_len_ssp = 0;
     /* SUB_PKT_LEN (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_ssp);
     bit_index += 7;
 
-    uint8_t lm_speed_info_cnt;
+    uint8_t lm_speed_info_cnt = 0;
     /* LM_Speed_Info_CNT (5 bits) */
     set_bits(payload, bit_index, 5, lm_speed_info_cnt);
     bit_index += 5;
 
     for(uint8_t i = 0; i < lm_speed_info_cnt; i++)
     {
-        uint16_t lm_static_speed_dist;
+        uint16_t lm_static_speed_dist = 0;
         /* LM_Static_Speed_Distance (15 bits) */
         set_bits(payload, bit_index, 15, lm_static_speed_dist);
         bit_index += 15;
 
-        uint8_t lm_static_speed_class;
+        uint8_t lm_static_speed_class = 0;
         /* LM_Static_Speed_Class (1 bit) */
         set_bits(payload, bit_index, 1, lm_static_speed_class);
         bit_index += 1;
@@ -1495,24 +1491,24 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
         /* ================= SPEED VALUES ================= */
         if(lm_static_speed_class == 0)
         {
-            uint8_t lm_speed_universal;
+            uint8_t lm_speed_universal = 0;
             /* Universal Speed (6 bits) */
             set_bits(payload, bit_index, 6, lm_speed_universal);
             bit_index += 6;
         }
         else if(lm_static_speed_class == 1)
         {
-            uint8_t lm_speed_class_a;
+            uint8_t lm_speed_class_a = 0;
             /* Class A (6 bits) */
             set_bits(payload, bit_index, 6, lm_speed_class_a);
             bit_index += 6;
 
-            uint8_t lm_speed_class_b;
+            uint8_t lm_speed_class_b = 0;
             /* Class B (6 bits) */
             set_bits(payload, bit_index, 6, lm_speed_class_b);
             bit_index += 6;
 
-            uint8_t lm_speed_class_c;
+            uint8_t lm_speed_class_c = 0;
             /* Class C (6 bits) */
             set_bits(payload, bit_index, 6, lm_speed_class_c);
             bit_index += 6;
@@ -1530,34 +1526,34 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*GP Packet Parsing*/
     uint16_t GP_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_grad;
+    uint8_t sub_pkt_type_grad = 0;
     /* SUB_PKT_TYPE (GRAD) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_grad);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_grad;
+    uint8_t sub_pkt_len_grad = 0;
     /* SUB_PKT_LEN_GRAD (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_grad);
     bit_index += 7;
 
-    uint8_t lm_grad_info_cnt;
+    uint8_t lm_grad_info_cnt = 0;
     /* LM_Grad_Info_CNT (5 bits) */
     set_bits(payload, bit_index, 5, lm_grad_info_cnt);
     bit_index += 5;
 
     for(uint8_t i = 0; i < lm_grad_info_cnt; i++)
     {
-        uint16_t lm_gradient_distance;
+        uint16_t lm_gradient_distance = 0;
         /* LM_Gradient_Distance (15 bits) */
         set_bits(payload, bit_index, 15, lm_gradient_distance);
         bit_index += 15;
 
-        uint8_t lm_gdir;
+        uint8_t lm_gdir = 0;
         /* LM_GDIR (1 bit) */
         set_bits(payload, bit_index, 1, lm_gdir);
         bit_index += 1;
 
-        uint8_t lm_gradient_value;
+        uint8_t lm_gradient_value = 0;
         /* LM_GRADIENT_VALUE (5 bits) */
         set_bits(payload, bit_index, 5, lm_gradient_value);
         bit_index += 5;
@@ -1575,56 +1571,56 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*LCGP Packet Parsing*/
     uint16_t LCGP_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_lc;
+    uint8_t sub_pkt_type_lc = 0;
     /* SUB_PKT_TYPE (LC) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_lc);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_lc;
+    uint8_t sub_pkt_len_lc = 0;
     /* SUB_PKT_LEN_LC (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_lc);
     bit_index += 7;
 
-    uint8_t lm_lc_info_cnt;
+    uint8_t lm_lc_info_cnt = 0;
     /* LM_LC_Info_CNT (5 bits) */
     set_bits(payload, bit_index, 5, lm_lc_info_cnt);
     bit_index += 5;
 
     for(uint8_t i = 0; i < lm_lc_info_cnt; i++)
     {
-        uint16_t lm_lc_distance;
+        uint16_t lm_lc_distance = 0;
         /* LM_LC_Distance (15 bits) */
         set_bits(payload, bit_index, 15, lm_lc_distance);
         bit_index += 15;
 
-        uint16_t lm_lc_id_numeric;
+        uint16_t lm_lc_id_numeric = 0;
         /* LM_LC_ID_Numeric (10 bits) */
         set_bits(payload, bit_index, 10, lm_lc_id_numeric);
         bit_index += 10;
 
-        uint8_t lm_lc_id_alpha_suffix;
+        uint8_t lm_lc_id_alpha_suffix = 0;
         /* Alpha suffix (3 bits) */
         set_bits(payload, bit_index, 3, lm_lc_id_alpha_suffix);
         bit_index += 3;
 
-        uint8_t lm_lc_manning_type;
+        uint8_t lm_lc_manning_type = 0;
         /* Manning type (1 bit)*/
         set_bits(payload, bit_index, 1, lm_lc_manning_type);
         bit_index += 1;
 
-        uint8_t lm_lc_class;
+        uint8_t lm_lc_class = 0;
         /* LC class (3 bits)*/
         set_bits(payload, bit_index, 3, lm_lc_class);
         bit_index += 3;
 
-        uint8_t lm_lc_auto_whistle_en;
+        uint8_t lm_lc_auto_whistle_en = 0;
         /* LM LC Auto whistle Enabled (1 bit)*/
         set_bits(payload, bit_index, 1, lm_lc_auto_whistle_en);
         bit_index += 1;
 
         if(lm_lc_auto_whistle_en == 1)
         {
-            uint8_t lm_lc_auto_whistle_type;
+            uint8_t lm_lc_auto_whistle_type = 0;
             /* LM LC Auto whistle Type(2 bit)*/
             set_bits(payload, bit_index, 2, lm_lc_auto_whistle_type);
             bit_index += 2;
@@ -1643,34 +1639,34 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*TSP Packet Parsing*/
     uint16_t TSP_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_tsp;
+    uint8_t sub_pkt_type_tsp = 0;
     /* SUB_PKT_TYPE (TSP) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_tsp);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_tsp;
+    uint8_t sub_pkt_len_tsp = 0;
     /* SUB_PKT_LEN_TSP (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_tsp);
     bit_index += 7;
 
-    uint8_t to_cnt;
+    uint8_t to_cnt = 0;
     /* TO_CNT (2 bits) */
     set_bits(payload, bit_index, 2, to_cnt);
     bit_index += 2;
 
     for(uint8_t i = 0; i < to_cnt; i++)
     {
-        uint8_t to_speed;
+        uint8_t to_speed = 0;
         /* TO_SPEED (5 bits) */
         set_bits(payload, bit_index, 5, to_speed);
         bit_index += 5;
 
-        uint16_t diff_dist_to;
+        uint16_t diff_dist_to = 0;
         /* DIFF_DIST_TO (15 bits) */
         set_bits(payload, bit_index, 15, diff_dist_to);
         bit_index += 15;
 
-        uint16_t to_speed_rel_dist;
+        uint16_t to_speed_rel_dist = 0;
         /* TO_SPEED_REL_DIST (12 bits) */
         set_bits(payload, bit_index, 12, to_speed_rel_dist);
         bit_index += 12;
@@ -1688,22 +1684,22 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*TLI Packet Parsing*/
     uint16_t TLI_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_tli;
+    uint8_t sub_pkt_type_tli = 0;
     /* SUB_PKT_TYPE (TLI) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_tli);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_tli;
+    uint8_t sub_pkt_len_tli = 0;
     /* SUB_PKT_LEN_TLI (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_tli);
     bit_index += 7;
 
-    uint8_t dist_dup_tag;
+    uint8_t dist_dup_tag = 0;
     /* DIST_DUP_TAG (4 bits) */
     set_bits(payload, bit_index, 4, dist_dup_tag);
     bit_index += 4;
 
-    uint8_t route_rfid_cnt;
+    uint8_t route_rfid_cnt = 0;
     /* ROUTE_RFID_CNT (6 bits) */
     set_bits(payload, bit_index, 6, route_rfid_cnt);
     bit_index += 6;
@@ -1729,30 +1725,30 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
         bit_index += 1;
     }
 
-    uint8_t abs_loc_reset;
+    uint8_t abs_loc_reset = 0;
     /* ABS_LOC_RESET (1 bit)*/
     set_bits(payload, bit_index, 1, abs_loc_reset);
     bit_index += 1;
 
     if(abs_loc_reset == 1)
     {
-        uint16_t start_dist_loc_reset;
+        uint16_t start_dist_loc_reset = 0;
         /* START_DIST_TO_LOC_RESET (15 bits) */
         set_bits(payload, bit_index, 15, start_dist_loc_reset);
         bit_index += 15;
 
-        uint8_t adj_loco_dir;
+        uint8_t adj_loco_dir = 0;
         /* ADJ_LOCO_DIR (2 bits) */
         set_bits(payload, bit_index, 2, adj_loco_dir);
         bit_index += 2;
 
-        uint32_t abs_loc_correction;
+        uint32_t abs_loc_correction = 0;
         /* ABS_LOC_CORRECTION (23 bits) */
         set_bits(payload, bit_index, 23, abs_loc_correction);
         bit_index += 23;
     }
 
-    uint8_t adj_line_cnt;
+    uint8_t adj_line_cnt = 0;
     /* ADJ_LINE_CNT (3 bits) */
     set_bits(payload, bit_index, 3, adj_line_cnt);
     bit_index += 3;
@@ -1973,12 +1969,12 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
 
     uint16_t last_ref_rfid /*= g_my_loco_id*/;
     /* LAST_REF_RFID (10 bits) */
-    set_bits(payload, bit_index, 10, ref_prof_id);
+    set_bits(payload, bit_index, 10, last_ref_rfid);
     bit_index += 10;
 
     uint16_t dist_pkt_start /*= g_my_loco_id*/;
     /* DIST_PKT_START (15 bits) */
-    set_bits(payload, bit_index, 15, ref_prof_id);
+    set_bits(payload, bit_index, 15, dist_pkt_start);
     bit_index += 15;
 
     uint8_t pkt_dir /*= g_my_loco_id*/;
@@ -1998,47 +1994,47 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     set_bits(payload, bit_index, 4, sub_pkt_type);
     bit_index += 4;
 
-    uint8_t sub_pkt_len /*= g_my_loco_id*/;
+    uint8_t sub_pkt_len = 0 /*= g_my_loco_id*/;
     /* SUB_PKT_LEN (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len);
     bit_index += 7;
 
-    uint8_t frame_offset /*= g_my_loco_id*/;
+    uint8_t frame_offset = 0 /*= g_my_loco_id*/;
     /* FRAME_OFFSET (4 bits) */
     set_bits(payload, bit_index, 4, frame_offset);
     bit_index += 4;
 
-    uint8_t dest_loco_sos /*= g_my_loco_id*/;
+    uint8_t dest_loco_sos = 0 /*= g_my_loco_id*/;
     /* DEST_LOCO_SOS (1 + 3 = 4 bits) */
     set_bits(payload, bit_index, 4, dest_loco_sos);
     bit_index += 4;
 
-    uint8_t train_section_type /*= g_my_loco_id*/;
+    uint8_t train_section_type = 0 /*= g_my_loco_id*/;
     /* TRAIN_SECTION_TYPE (2 bits) */
     set_bits(payload, bit_index, 2, train_section_type);
     bit_index += 2;
 
-    uint32_t cur_sig_info /*= g_my_loco_id*/;
+    uint32_t cur_sig_info = 0 /*= g_my_loco_id*/;
     /* ================= CUR_SIG_INFO (17 bits) ================= */
     set_bits(payload, bit_index, 17, cur_sig_info);
     bit_index += 17;
 
-    uint8_t cur_sig_aspect /*= g_my_loco_id*/;
+    uint8_t cur_sig_aspect = 0 /*= g_my_loco_id*/;
     /* CUR_SIG_ASPECT (complete 2 + 4 = 6 bits) */
     set_bits(payload, bit_index, 6, cur_sig_aspect);
     bit_index += 6;
 
-    uint8_t next_sig_aspect /*= g_my_loco_id*/;
+    uint8_t next_sig_aspect = 0 /*= g_my_loco_id*/;
     /* NEXT_SIG_ASPECT (4 + 2 = 6 bits) */
     set_bits(payload, bit_index, 6, next_sig_aspect);
     bit_index += 6;
 
-    uint16_t appr_sig_dist /*= g_my_loco_id*/;
+    uint16_t appr_sig_dist = 0 /*= g_my_loco_id*/;
     /* APPR_SIG_DIST (6 + 8 + 1 = 15 bits) */
-    set_bits(payload, bit_index, 15, next_sig_aspect);
+    set_bits(payload, bit_index, 15, appr_sig_dist);
     bit_index += 15;
 
-    uint8_t authority_type /*= g_my_loco_id*/;
+    uint8_t authority_type = 0 /*= g_my_loco_id*/;
     /* AUTHORITY_TYPE (2 bits) */
     set_bits(payload, bit_index, 2, authority_type);
     bit_index += 2;
@@ -2046,17 +2042,17 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     /* AUTHORIZED_SPEED (6 bits) */
     if(authority_type == 1)
     {
-        uint8_t authorized_speed /*= g_my_loco_id*/;
+        uint8_t authorized_speed = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 6, authorized_speed);
         bit_index += 6;
     }
 
-    uint16_t ma_wrt_sig /*= g_my_loco_id*/;
+    uint16_t ma_wrt_sig = 0 /*= g_my_loco_id*/;
     /* MA_W_R_T_SIG (16 bits) */
     set_bits(payload, bit_index, 16, ma_wrt_sig);
     bit_index += 16;
 
-    uint8_t req_shorten_ma /*= g_my_loco_id*/;
+    uint8_t req_shorten_ma = 0 /*= g_my_loco_id*/;
     /* REQ_SHORTEN_MA (1 bit) */
     set_bits(payload, bit_index, 1, req_shorten_ma);
     bit_index += 1;
@@ -2064,35 +2060,35 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     /* NEW_MA (16 bits) */
     if(req_shorten_ma == 1)
     {
-        uint16_t new_ma /*= g_my_loco_id*/;
+        uint16_t new_ma = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 16, new_ma);
         bit_index += 16;
     }
 
-    uint8_t trn_len_info_sts /*= g_my_loco_id*/;
+    uint8_t trn_len_info_sts = 0 /*= g_my_loco_id*/;
     /* TRAIN_LENGTH_INFO_STS (1 bit)*/
     set_bits(payload, bit_index, 1, trn_len_info_sts);
     bit_index += 1;
 
     if(trn_len_info_sts == 1)
     {
-        uint8_t trn_len_info_type /*= g_my_loco_id*/;
+        uint8_t trn_len_info_type = 0 /*= g_my_loco_id*/;
         /*TRAIN_LENGTH_INFO_TYPE (1 bit)*/
         set_bits(payload, bit_index, 1, trn_len_info_type);
         bit_index += 1;
 
-        uint32_t ref_frame_num_tlm /*= g_my_loco_id*/;
+        uint32_t ref_frame_num_tlm = 0 /*= g_my_loco_id*/;
         /* REF_FRAME_NUM_TLM (17 bits) */
         set_bits(payload, bit_index, 17, ref_frame_num_tlm);
         bit_index += 17;
 
-        uint8_t ref_offset_int_tlm /*= g_my_loco_id*/;
+        uint8_t ref_offset_int_tlm = 0 /*= g_my_loco_id*/;
         /* REF_OFFSET_INT_TLM (8 bits) */
         set_bits(payload, bit_index, 8, ref_offset_int_tlm);
         bit_index += 8;
     }
 
-    uint8_t next_stn_comm /*= g_my_loco_id*/;
+    uint8_t next_stn_comm = 0 /*= g_my_loco_id*/;
     /* NEXT_STN_COMM (1 bit) */
     set_bits(payload, bit_index, 1, next_stn_comm);
     bit_index += 1;
@@ -2101,7 +2097,7 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     /* APPR_STN_ID (16 bits) */
     if(next_stn_comm == 1)
     {
-        uint16_t appr_stn_id /*= g_my_loco_id*/;
+        uint16_t appr_stn_id = 0 /*= g_my_loco_id*/;
         set_bits(payload, bit_index, 16, appr_stn_id);
         bit_index += 16;
     }
@@ -2113,6 +2109,11 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
         set_bits(buf, bit_index, padding_bits, 0);
         bit_index += padding_bits;
     }
+
+    uint16_t payload_len = (bit_index + 7) / 8;
+    /* Insert PKT_LEN back into header */
+    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
+    return payload_len;
 }
 
 void radio_send_reg_type2(radio_id_t radio_id)
