@@ -41,3 +41,5 @@ Thumbs.db
 # Uncomment if conflicts happen
 # .cproject
 # .project
+.claude/skills/ti-ccstudio-clang-code-coverage/scripts/extract_profile_counters.js
+.claude/skills/ti-ccstudio-clang-code-coverage/SKILL.md

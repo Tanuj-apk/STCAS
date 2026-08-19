@@ -6,10 +6,10 @@
 #include "sci.h"
 #include "radio.h"
 #include <stdio.h>
+#include "SMOCIP.h"
 //#include "StateMachine.h"
 //#include "dmi_can.h"
 
-// CCS v12.8.1 Git test
 /* ============================================================
  *  CPU STARTUP PAYLOAD CONSTANTS
  * ============================================================ */
@@ -31,6 +31,7 @@ static uint8_t rx_data_input_card[8];
 static uint8_t rx_data_radio[8];
 static uint32_t rx_id;
 static uint8_t rx_dmi_pilot[8];
+static uint8_t rx_data_smocip[8];
 
 /* ============================================================
  *  TX BUFFERS
@@ -100,7 +101,7 @@ void send_cpu_universal_ack(uint8_t peripheral_id, uint8_t action_type, uint8_t 
     tx_buf[1] = peripheral_id;
     tx_buf[2] = action_type;
     tx_buf[3] = ack_status;
-    /* Bytes 4–7 are reserved and must be 0 */
+    /* Bytes 4ï¿½7 are reserved and must be 0 */
 
     canTransmit(canREG1, canMESSAGE_BOX9, tx_buf);
 }
@@ -147,11 +148,10 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data)
         return;
     }
     /* ---------- INPUT CARD RX ---------- */
-    //! 0x150 - Primary Input Card
-    //! 0x151 - Redundant Input Card
+    //! 0x150,151,152 - Input Cards
     if ((can_id & INPUT_CARD_RX_MASK) == INPUT_CARD_RX_ID)
     {
-        input_card_rx_handle(can_id, data);
+        input_card_rx_handler(can_id, data);
         return;
     }
     /* ---- RADIO AAP RX ---- */
@@ -160,6 +160,12 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data)
     if ((can_id & RADIO_AAP_RX_MASK) == RADIO_AAP_RX_BASE_ID)
     {
         radio_rx_handle(can_id, data);
+        return;
+    }
+    //! 0x221 - SMOCIP
+    if (can_id == SMOCIP_RX_ID) 
+    {
+        smocip_rx_handle(data);
         return;
     }
 }
@@ -244,7 +250,6 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         can_if_process_rx(rx_id, rx_dmi_pilot);
 
     }
-
     else if (messageBox == canMESSAGE_BOX3)
     {
         canGetData(node, messageBox, rx_data_startup);
@@ -273,9 +278,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
 
         can_if_process_rx(rx_id, rx_data_gsm);
     }
-    
-    //! 0x150 - Primary Input Card
-    //! 0x151 - Redundant Input Card
+    //! 0x150,151,152 - Primary Input Card
     else if (messageBox == canMESSAGE_BOX10) 
     {
         canGetData(node, messageBox, rx_data_input_card);
@@ -292,6 +295,14 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         rx_id = canGetID(node, messageBox);
 
         can_if_process_rx(rx_id, rx_data_radio);
+    } 
+    //! 0x221 - SMOCIP
+    else if (messageBox == canMESSAGE_BOX21) 
+    {
+      canGetData(node, messageBox, rx_data_smocip);
+      rx_id = canGetID(node, messageBox);
+
+      can_if_process_rx(rx_id, rx_data_smocip);
     }
 }
 

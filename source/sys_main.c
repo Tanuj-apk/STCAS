@@ -71,6 +71,7 @@
 #include "sys_common.h"
 #include "system.h"
 #include "input_card.h"
+#include "SMOCIP.h"
 //#include "BIUController.h"
 /* USER CODE END */
 
@@ -242,6 +243,13 @@ void KavachInit(void)
 
     start_rtc_write = 1;
 
+    //! For testing SMOCIP Tx
+    smocip_build_payload();
+
+    smocip_send_can(0);
+    smocip_send_can(1);
+    smocip_send_can(2);
+
     //BIU Check
 //    BIU_Init();
 }
@@ -379,8 +387,31 @@ void v_1sTasks(void)
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
     count++;
-//    check_for_transmit_arp();
-    /* Only for testing     
+    //! ========For testing SMOCIP Tx=========
+    smocip_test_data_init();
+    static uint8_t smocip_frame = 0;
+    static uint8_t smocip_delay = 0;
+
+    if (smocip_delay > 0) {
+      smocip_delay--;
+    } else {
+      if (smocip_frame == 0) {
+        smocip_build_payload();
+      }
+
+      smocip_send_can(smocip_frame);
+
+      smocip_frame++;
+
+      if (smocip_frame >= 3) {
+        smocip_frame = 0;
+      }
+
+      smocip_delay = 1;
+    }
+    //! ======================================
+    //    check_for_transmit_arp();
+    /* Only for testing
     if(count >= 10)
     {
         gsm_start_request(GSM_1);
@@ -391,7 +422,8 @@ void v_1sTasks(void)
         count = 0;
     }
      */
-    //seconds_uptime++;   // already in your rtiNotification (okay to keep here too if not)
+    // seconds_uptime++;   // already in your rtiNotification (okay to keep here
+    // too if not)
     if (fallback_active)
     {
         /* Always count how long we've been in fallback */
@@ -437,6 +469,7 @@ void v_1sTasks(void)
             if (seconds_in_fallback == FALLBACK_TIMEOUT_SEC)
             {
                 cpu_time_valid = 0;
+                //! Switch to SF mode
                 uint8_t dbgTime[96];
                 uint32 lenT = sprintf((char *)dbgTime, "TIME INVALID: cpu=%lu fb_sec=%lu\r\n",
                                       (unsigned long)cpu_time_sec, (unsigned long)seconds_in_fallback);

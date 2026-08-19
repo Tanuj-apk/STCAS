@@ -1,111 +1,160 @@
 #include "input_card.h"
-//#include "StateMachine.h"
-#include "gps.h"
-/* ================= INTERNAL CONTEXT ================= */
-//! Added by Tanuj
-uint8_t reverse_active = 0;
-uint32_t reverse_start_time = 0;
 
-typedef struct
+input_card_data_t input_card_data[INPUT_CARD_COUNT]; // Raw data received from Input Cards
+field_input_t
+    field_inputs[FIELD_INPUT_COUNT]; // Current value of each field-input key,
+                                     // will eventually store Key + Value
+input_mapping_t input_mapping[FIELD_INPUT_COUNT]; // will eventually tell us
+                                                  // Card + Channel → Key
+
+static uint8_t input_card_get_index(uint32_t can_id) 
 {
-    uint32_t inputs;
-    uint8_t  valid;
-    uint8_t  seq;
-} input_card_ctx_t;
+    if (can_id == INPUT_CARD1_CAN_ID) 
+    {
+        return 0U;
+    } 
+    else if (can_id == INPUT_CARD2_CAN_ID) 
+    {
+        return 1U;
+    } 
+    else if (can_id == INPUT_CARD3_CAN_ID) 
+    {
+        return 2U;
+    }
 
-static input_card_ctx_t input_cards[INPUT_CARD_COUNT];
-
-/* ================= INTERNAL HELPERS ================= */
-/*
- * This function maps a received CAN ID to the corresponding
- * input card index used internally.
- */
-static uint8_t card_index_from_can_id(uint32_t can_id)
-{
-    return (uint8_t)(can_id - INPUT_CARD_RX_ID); // 0x150 ? 0, 0x151 ? 1
+    return 0xFFU;
 }
 
-/* ================= RX HANDLER ================= */
-
-void input_card_rx_handle(uint32_t can_id, uint8_t *data)
+static void field_input_set_value(uint16_t key, uint8_t value) 
 {
-/*
-* CAN PAYLOAD FORMAT (INPUT CARD)
-*
-* Byte 0 : Card ID (1 = Primary, 2 = Redundant)
-* Byte 1 : Input bits 0–7
-?    Bit 0	COMMON/ACK-CAB1.DMI
-?    Bit 1	CANCEL-CAB1.DMI
-?    Bit 2	SOS-CAB1.DMI
-?    Bit 3	LEADING/NON-LEADING-CAB1
-?    Bit 4	NORMAL BRAKE RELAY FBK
-?    Bit 5	FULL SERVICE BRAKE FBK
-?    Bit 6	EMERGENCY BRAKE FBK
-?    Bit 7	TRACTION CUTOFF FBK
-* Byte 2 : Input bits 8–15
-?    Bit 8	ACTIVE-CAB1
-?    Bit 9	ACTIVE-CAB2
-?    Bit 10	FORWARD HANDLE-CAB1
-?    Bit 11	REVERSE HANDLE-CAB1
-?    Bit 12	FORWARD HANDLE-CAB2
-?    Bit 13	REVERSE HANDLE-CAB2
-?    Bit 14	HORN CUTOUT FBK-CAB1
-?    Bit 15	HORN CUTOUT FBK-CAB2
-* Byte 3 : Input bits 16–23
-?    Bit 16	COMMON/ACK-CAB2.DMI
-?    Bit 17	CANCEL-CAB2.DMI
-?    Bit 18	SOS-CAB2.DMI
-?    Bit 19	LEADING/NON-LEADING-CAB2
-?    Bit 20	VEB ISO CUTOUT-CAB1
-?    Bit 21	VEB ISO CUTOUT-CAB2
-?    Bit 22	VEB COIL FBK-CAB1
-?    Bit 23	VEB COIL FBK-CAB2
-* Byte 4 : Input bits 24–31
-?    Bit 24	KAVACH ISOLATION FBK
-?    Bit 25	IRU NORMAL FBK-CAB1
-?    Bit 26	IRU NORMAL FBK-CAB2
-?    Bit 27	TRACTION CUTOFF STATUS
-?    Bit 28	LIGHT ENGINE BRAKE FBK
-?    Bit 29	KAVACH SERVICE STATUS
-?    Bit 30	TACHO POWER SUPPLY
-?    Bit 31	SPARE
-* Byte 5 : Sequence Counter
-* Byte 6 : Health / Status
-* Byte 7 : Reserved
-*/
-    uint8_t idx;
+    field_inputs[key - 1U].key = key;
+    field_inputs[key - 1U].value = value;
+}
+input_mapping_t input_mapping[FIELD_INPUT_COUNT] = 
+{
+    /* Card 1 : Channels 0-31 */
 
-    /* Map CAN ID to internal card index */
-    idx = card_index_from_can_id(can_id);
+    {1U, 0U, KEY_D01_HECR},
+    {1U, 1U, KEY_D01_DECR},
+    {1U, 2U, KEY_D01_HHECR},
+    {1U, 3U, KEY_ID01_HECR},
+    {1U, 4U, KEY_ID01_DECR},
+    {1U, 5U, KEY_ID01_HHECR},
+    {1U, 6U, KEY_S01_RECR},
+    {1U, 7U, KEY_S01_HECR},
+    {1U, 8U, KEY_S01_DECR},
+    {1U, 9U, KEY_ID02_HECR},
+    {1U, 10U, KEY_ID02_DECR},
+    {1U, 11U, KEY_ID02_HHECR},
+    {1U, 12U, KEY_S02_DECR},
+    {1U, 13U, KEY_S02_HECR},
+    {1U, 14U, KEY_S02_RECR},
+    {1U, 15U, KEY_S04_DECR},
+    {1U, 16U, KEY_S04_HECR},
+    {1U, 17U, KEY_S04_RECR},
+    {1U, 18U, KEY_S06_HECR},
+    {1U, 19U, KEY_S06_RECR},
+    {1U, 20U, KEY_UP_IBS_RECR},
+    {1U, 21U, KEY_UP_IBS_DECR},
+    {1U, 22U, KEY_S05_RECR},
+    {1U, 23U, KEY_S05_HECR},
+    {1U, 24U, KEY_ID11_HECR},
+    {1U, 25U, KEY_ID11_DECR},
+    {1U, 26U, KEY_S11_RECR},
+    {1U, 27U, KEY_S11_DECR},
+    {1U, 28U, KEY_S08_DECR},
+    {1U, 29U, KEY_S08_RECR},
+    {1U, 30U, KEY_S07_RECR},
+    {1U, 31U, KEY_S07_HECR},
 
-    /* Safety: ignore invalid index */
-    if (idx >= INPUT_CARD_COUNT)
-        return;
+    /* Card 2 : Channels 0-31 */
 
-    /* Validate card identity (payload vs CAN ID) */
-    if (data[0] != (idx + 1U))
-        return;
+    {2U, 0U, KEY_S09_D11_RECR},
+    {2U, 1U, KEY_S09_D11_HECR},
+    {2U, 2U, KEY_S09_D11_DECR},
+    {2U, 3U, KEY_S09_D11_HHECR},
+    {2U, 4U, KEY_S03_RECR},
+    {2U, 5U, KEY_S03_HECR},
+    {2U, 6U, KEY_S03_DECR},
+    {2U, 7U, KEY_S03_HHECR},
+    {2U, 8U, KEY_D02_HECR},
+    {2U, 9U, KEY_D02_DECR},
+    {2U, 10U, KEY_D02_HHECR},
+    {2U, 11U, KEY_101A},
+    {2U, 12U, KEY_104A},
+    {2U, 13U, KEY_104B},
+    {2U, 14U, KEY_102B},
+    {2U, 15U, KEY_102A},
+    {2U, 16U, KEY_106B},
+    {2U, 17U, KEY_103B},
+    {2U, 18U, KEY_103A},
+    {2U, 19U, KEY_106A},
+    {2U, 20U, KEY_101B},
+    {2U, 21U, KEY_105B},
+    {2U, 22U, KEY_105A},
+    {2U, 23U, KEY_C01T},
+    {2U, 24U, KEY_04AT},
+    {2U, 25U, KEY_04BT},
+    {2U, 26U, KEY_104AT},
+    {2U, 27U, KEY_H01T},
+    {2U, 28U, KEY_101BT},
+    {2U, 29U, KEY_09T},
+    {2U, 30U, KEY_03AT},
+    {2U, 31U, KEY_03BT},
 
-    /* Extract 32-bit input value (little-endian) */
-    uint32_t in =
-    (uint32_t)data[1] |
-    ((uint32_t)data[2] << 8) |
-    ((uint32_t)data[3] << 16) |
-    ((uint32_t)data[4] << 24);
+    /* Card 3 : Channels 0-28 */
 
-    input_cards[idx].inputs = in;
+    {3U, 0U, KEY_104BT},
+    {3U, 1U, KEY_102BT},
+    {3U, 2U, KEY_03_07T},
+    {3U, 3U, KEY_08T},
+    {3U, 4U, KEY_H02T},
+    {3U, 5U, KEY_04_06T},
+    {3U, 6U, KEY_102AT},
+    {3U, 7U, KEY_106BT},
+    {3U, 8U, KEY_02BT},
+    {3U, 9U, KEY_02AT},
+    {3U, 10U, KEY_103BT},
+    {3U, 11U, KEY_103AT},
+    {3U, 12U, KEY_01BT},
+    {3U, 13U, KEY_01AT},
+    {3U, 14U, KEY_105T},
+    {3U, 15U, KEY_106AT},
+    {3U, 16U, KEY_101AT},
+    {3U, 17U, KEY_C02T},
+    {3U, 18U, KEY_11AC},
+    {3U, 19U, KEY_SH43},
+    {3U, 20U, KEY_SH41},
+    {3U, 21U, KEY_SH42},
+    {3U, 22U, KEY_C01},
+    {3U, 23U, KEY_C02},
+    {3U, 24U, KEY_RS1},
+    {3U, 25U, KEY_RS2},
+    {3U, 26U, KEY_RS3},
+    {3U, 27U, KEY_LC8},
+    {3U, 28U, KEY_LC9}
+};
 
-    /* Store sequence counter */
-    input_cards[idx].seq = data[5];
+void input_card_rx_handler(uint32_t can_id, uint8_t *data) 
+{
+    uint8_t index;
 
-    /* Mark this card as valid (data received) */
-    input_cards[idx].valid = 1;
+    uint8_t pkt_type;
+    uint8_t seq_total;
+    uint8_t seq_index;
 
-    /* =========================================
-    * UPDATE GLOBAL INPUT FLAGS (PRIMARY ONLY)
-    * ========================================= */
+    uint32_t inputs;
+    uint8_t card;
+    uint8_t channel;
+    uint16_t key;
 
-    if (idx == INPUT_CARD_PRIMARY)
+    pkt_type = data[0] & 0x0F;
+
+    seq_total = ((data[0] >> 4) & 0x0F) | ((data[1] & 0x03) << 4);
+
+    seq_index = (data[1] >> 2) & 0x3F;
+
+    if (seq_total != 1U) 
     {
         /* -------- LEADING / NON-LEADING -------- */
 
@@ -135,39 +184,12 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
 //        uint8_t cab2_active = (in >> IN_ACTIVE_CAB2) & 1U;
 //        static uint8_t prev_active_cab = 0;
 
-        /* Clear relevant bits */
-//        input_write.raw_flags[0] &= ~((1U << 6) | (1U << 7) | (1U << 8));
-//
-//        /* Case 1: No CAB active */
-//        if (!cab1_active && !cab2_active)
-//        {
-//            input_write.raw_flags[0] |= (1U << 6); // Condition 7
-//            prev_active_cab = 0;
-//        }
-//
-//        /* Case 2: Exactly one CAB active */
-//        else if (cab1_active ^ cab2_active)
-//        {
-//            input_write.raw_flags[0] |= (1U << 7); // Condition 8
-//
-//            uint8_t current_cab = cab1_active ? 1 : 2;
-//
-//            /* Detect CAB change */
-//            if (prev_active_cab != 0 && prev_active_cab != current_cab)
-//            {
-//                input_write.raw_flags[0] |= (1U << 8);  // CAB changed Condition 9
-//            }
-//
-//            prev_active_cab = current_cab;
-//        }
+    if (seq_index != 0U) 
+    {
+        return;
+    }
 
-//        /* Case 3: Both active ? Fault */
-//        else
-//        {
-//            // TODO: fault handling
-//            // Example:
-//            // system_faults |= FAULT_BOTH_CABS_ACTIVE;
-//        }
+    index = input_card_get_index(can_id);
 
         //!Added by Tanuj
 //        uint8_t fwd_cab1 = (in >> IN_FORWARD_HANDLE_CAB1) & 1U;
@@ -195,30 +217,8 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
 //            rev = 0;
 //        }
 
-//        uint8_t handle_state;
-//
-//        if (fwd == 0 && rev == 0)
-//        {
-//            handle_state = HANDLE_NEUTRAL;
-//        }
-//        else if (fwd == 1 && rev == 0)
-//        {
-//            handle_state = HANDLE_FORWARD;
-//        }
-//        else if (fwd == 0 && rev == 1)
-//        {
-//            handle_state = HANDLE_REVERSE;
-//            reverse_active = 1;
-//        }
-//        else
-//        {
-//            handle_state = HANDLE_INVALID;  // both 1 - fault
-//        }
-//        if (handle_state != HANDLE_REVERSE && reverse_active == 1)
-//        {
-//            reverse_active = 0;
-//            input_write.raw_flags[1] |= (1U << 8);  // Reverse condition
-//        }
+        channel = input_mapping[i].channel;
+        key = input_mapping[i].key;
 
         /* =========================================
         * KAVACH ISOLATION LOGIC
@@ -240,41 +240,7 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
     }
 }
 
-/* ================= QUERY API ================= */
-/*
- * Returns whether at least one valid CAN frame has been received from the specified input card.
- *         1 ? valid data available
- *         0 ? no data received yet
- */
-//! Currently Unused
-uint8_t input_card_is_valid(input_card_id_t card)
+uint8_t field_input_get_value(uint16_t key) 
 {
-    if (card >= INPUT_CARD_COUNT)
-        return 0;
-
-    return input_cards[card].valid;
-}
-/*
- * Returns the latest snapshot of all 32 digital inputs received from the specified card.
-*/
-//! Currently Unused
-uint32_t input_card_get_raw_bits(input_card_id_t card)
-{
-    if (card >= INPUT_CARD_COUNT)
-        return 0;
-
-    return input_cards[card].inputs;
-}
-
-/*
- * This function checks whether a particular input signal
- * (bit position) is active (1) or inactive (0).
- */
-//! Currently Unused
-uint8_t input_card_is_bit_set(input_card_id_t card, uint8_t bit)
-{
-    if (card >= INPUT_CARD_COUNT || bit >= 32)
-        return 0;
-
-    return (input_cards[card].inputs >> bit) & 0x01U;
+    return field_inputs[key - 1U].value;
 }
