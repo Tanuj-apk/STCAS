@@ -259,15 +259,12 @@ extern uint32_t tx_mb;
 #define TLM_MAX_SAMPLES_PER_SEC 150U
 #define TLM_HISTORY_SECONDS 20U
 
-typedef struct {
+typedef struct
+{
   uint32_t tod_sec;
-
   uint32_t tod_ms[TLM_MAX_SAMPLES_PER_SEC];
-
   uint16_t sec_span_ms;
-
   float distance_odo[TLM_MAX_SAMPLES_PER_SEC];
-
 } dist_array_t;
 
 extern dist_array_t distance_db[TLM_HISTORY_SECONDS];

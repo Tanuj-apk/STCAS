@@ -109,8 +109,8 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
     {
         /* -------- LEADING / NON-LEADING -------- */
 
-        uint8_t cab1_leading  = (in >> IN_LEADING_CAB1) & 1U;
-        uint8_t cab2_leading = (in >> IN_LEADING_CAB2) & 1U;
+//        uint8_t cab1_leading  = (in >> IN_LEADING_CAB1) & 1U;
+//        uint8_t cab2_leading = (in >> IN_LEADING_CAB2) & 1U;
 
 //        /* Clear previous bits (important) */
 //        input_write.raw_flags[0] &= ~((1U << 2) | (1U << 3));
@@ -131,9 +131,9 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
 
         /* -------- CAB OCCUPANCY LOGIC -------- */
 
-        uint8_t cab1_active  = (in >> IN_ACTIVE_CAB1) & 1U;
-        uint8_t cab2_active = (in >> IN_ACTIVE_CAB2) & 1U;
-        static uint8_t prev_active_cab = 0;
+//        uint8_t cab1_active  = (in >> IN_ACTIVE_CAB1) & 1U;
+//        uint8_t cab2_active = (in >> IN_ACTIVE_CAB2) & 1U;
+//        static uint8_t prev_active_cab = 0;
 
         /* Clear relevant bits */
 //        input_write.raw_flags[0] &= ~((1U << 6) | (1U << 7) | (1U << 8));
@@ -170,30 +170,30 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
 //        }
 
         //!Added by Tanuj
-        uint8_t fwd_cab1 = (in >> IN_FORWARD_HANDLE_CAB1) & 1U;
-        uint8_t rev_cab1 = (in >> IN_REVERSE_HANDLE_CAB1) & 1U;
+//        uint8_t fwd_cab1 = (in >> IN_FORWARD_HANDLE_CAB1) & 1U;
+//        uint8_t rev_cab1 = (in >> IN_REVERSE_HANDLE_CAB1) & 1U;
+//
+//        uint8_t fwd_cab2 = (in >> IN_FORWARD_HANDLE_CAB2) & 1U;
+//        uint8_t rev_cab2 = (in >> IN_REVERSE_HANDLE_CAB2) & 1U;
 
-        uint8_t fwd_cab2 = (in >> IN_FORWARD_HANDLE_CAB2) & 1U;
-        uint8_t rev_cab2 = (in >> IN_REVERSE_HANDLE_CAB2) & 1U;
+//        uint8_t fwd = 0;
+//        uint8_t rev = 0;
 
-        uint8_t fwd = 0;
-        uint8_t rev = 0;
-
-        if (cab1_active && !cab2_active)
-        {
-            fwd = fwd_cab1;
-            rev = rev_cab1;
-        }
-        else if (cab2_active && !cab1_active)
-        {
-            fwd = fwd_cab2;
-            rev = rev_cab2;
-        }
-        else
-        {
-            fwd = 0;
-            rev = 0;
-        }
+//        if (cab1_active && !cab2_active)
+//        {
+//            fwd = fwd_cab1;
+//            rev = rev_cab1;
+//        }
+//        else if (cab2_active && !cab1_active)
+//        {
+//            fwd = fwd_cab2;
+//            rev = rev_cab2;
+//        }
+//        else
+//        {
+//            fwd = 0;
+//            rev = 0;
+//        }
 
 //        uint8_t handle_state;
 //
@@ -224,7 +224,7 @@ void input_card_rx_handle(uint32_t can_id, uint8_t *data)
         * KAVACH ISOLATION LOGIC
         * ========================================= */
 
-        uint8_t kavach_iso = (in >> IN_KAVACH_ISO_FBK) & 1U;
+//        uint8_t kavach_iso = (in >> IN_KAVACH_ISO_FBK) & 1U;
 
 //        /* Clear relevant bits first */
 //        input_write.raw_flags[0] &= ~((1U << 0) | (1U << 1));
