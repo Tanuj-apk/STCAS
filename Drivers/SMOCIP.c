@@ -7,6 +7,48 @@ smocip_rx_t smocip_rx;
 /* 18-byte payload */
 static uint8_t smocip_payload[18];
 
+//! ============ TEST DATA ==================
+void smocip_test_data_init(void) {
+  /* Station ID = "12345" */
+  smocip_tx.station_id[0] = '1';
+  smocip_tx.station_id[1] = '2';
+  smocip_tx.station_id[2] = '3';
+  smocip_tx.station_id[3] = '4';
+  smocip_tx.station_id[4] = '5';
+
+  /* KMS Key Index = 0x1234 */
+  smocip_tx.kms_key_index = 0x1234U;
+
+  /* TSR Count = 0x0056 */
+  smocip_tx.tsr_count = 0x0056U;
+
+  /*
+   * Status:
+   *
+   * Bit 0 = SMOCIP
+   * Bit 1 = STN_SOS_GEN
+   * Bit 2 = SOS_CANCEL
+   * Bit 3 = SOS_ACK
+   *
+   * 0x0B = 1011
+   *
+   * SMOCIP       = 1
+   * STN_SOS_GEN  = 1
+   * SOS_CANCEL   = 0
+   * SOS_ACK      = 1
+   */
+  smocip_tx.status_byte = 0x0BU;
+
+  /* Application checksum = AA BB CC DD EE FF */
+  smocip_tx.app_checksum[0] = 0xAAU;
+  smocip_tx.app_checksum[1] = 0xBBU;
+  smocip_tx.app_checksum[2] = 0xCCU;
+  smocip_tx.app_checksum[3] = 0xDDU;
+  smocip_tx.app_checksum[4] = 0xEEU;
+  smocip_tx.app_checksum[5] = 0xFFU;
+}
+//! =================================================
+
 void smocip_build_payload(void) 
 {
   smocip_payload[0] = smocip_tx.station_id[0];

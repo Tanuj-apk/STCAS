@@ -148,11 +148,10 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data)
         return;
     }
     /* ---------- INPUT CARD RX ---------- */
-    //! 0x150 - Primary Input Card
-    //! 0x151 - Redundant Input Card
+    //! 0x150,151,152 - Input Cards
     if ((can_id & INPUT_CARD_RX_MASK) == INPUT_CARD_RX_ID)
     {
-        input_card_rx_handle(can_id, data);
+        input_card_rx_handler(can_id, data);
         return;
     }
     /* ---- RADIO AAP RX ---- */
@@ -251,7 +250,6 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         can_if_process_rx(rx_id, rx_dmi_pilot);
 
     }
-
     else if (messageBox == canMESSAGE_BOX3)
     {
         canGetData(node, messageBox, rx_data_startup);
@@ -280,9 +278,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
 
         can_if_process_rx(rx_id, rx_data_gsm);
     }
-    
-    //! 0x150 - Primary Input Card
-    //! 0x151 - Redundant Input Card
+    //! 0x150,151,152 - Primary Input Card
     else if (messageBox == canMESSAGE_BOX10) 
     {
         canGetData(node, messageBox, rx_data_input_card);

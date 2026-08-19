@@ -123,7 +123,7 @@ void send_Data_Log(uint8_t count);
 
 /* RX dispatch */
 void can_if_process_rx(uint32_t can_id, uint8_t *data);
-void input_card_rx_handle(uint32_t can_id, uint8_t *data);
+void input_card_rx_handler(uint32_t can_id, uint8_t *data);
 
 /* CAN manager */
 void can_manager_init(void);
