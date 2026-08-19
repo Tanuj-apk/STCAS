@@ -36,5 +36,7 @@ void smocip_rx_handle(uint8_t *data);
 
 void smocip_build_payload(void);
 void smocip_send_can(uint8_t seq_index);
+//! TEST
+void smocip_test_data_init(void);
 
 #endif

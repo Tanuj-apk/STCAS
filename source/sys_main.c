@@ -387,8 +387,31 @@ void v_1sTasks(void)
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
     count++;
-//    check_for_transmit_arp();
-    /* Only for testing     
+    //! ========For testing SMOCIP Tx=========
+    smocip_test_data_init();
+    static uint8_t smocip_frame = 0;
+    static uint8_t smocip_delay = 0;
+
+    if (smocip_delay > 0) {
+      smocip_delay--;
+    } else {
+      if (smocip_frame == 0) {
+        smocip_build_payload();
+      }
+
+      smocip_send_can(smocip_frame);
+
+      smocip_frame++;
+
+      if (smocip_frame >= 3) {
+        smocip_frame = 0;
+      }
+
+      smocip_delay = 1;
+    }
+    //! ======================================
+    //    check_for_transmit_arp();
+    /* Only for testing
     if(count >= 10)
     {
         gsm_start_request(GSM_1);
@@ -399,7 +422,8 @@ void v_1sTasks(void)
         count = 0;
     }
      */
-    //seconds_uptime++;   // already in your rtiNotification (okay to keep here too if not)
+    // seconds_uptime++;   // already in your rtiNotification (okay to keep here
+    // too if not)
     if (fallback_active)
     {
         /* Always count how long we've been in fallback */
