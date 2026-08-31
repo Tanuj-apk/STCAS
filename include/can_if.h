@@ -13,6 +13,12 @@ typedef enum
     CAN_MSG_COUNT
 } can_msg_id_t;
 
+typedef enum
+{
+    CAN_SOURCE_1 = 0,
+    CAN_SOURCE_2 = 1
+} can_source_t;
+
 /* ============================================================
  *  STARTUP ACK RANGE
  * ============================================================ */
@@ -122,8 +128,8 @@ void send_Counter_Change_req(uint8_t flagSet);
 void send_Data_Log(uint8_t count);
 
 /* RX dispatch */
-void can_if_process_rx(uint32_t can_id, uint8_t *data);
-void input_card_rx_handler(uint32_t can_id, uint8_t *data);
+void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source);
+void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_source);
 
 /* CAN manager */
 void can_manager_init(void);

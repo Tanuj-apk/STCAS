@@ -1,11 +1,20 @@
 #include "SMOCIP.h"
 #include "can.h"
+#include <string.h>
 
 smocip_tx_t smocip_tx;
 smocip_rx_t smocip_rx;
 
 /* 18-byte payload */
 static uint8_t smocip_payload[18];
+
+typedef struct {
+  uint8_t data[8];
+  uint8_t valid;
+} smocip_can_frame_ctx_t;
+
+static smocip_can_frame_ctx_t smocip_can1;
+static smocip_can_frame_ctx_t smocip_can2;
 
 //! ============ TEST DATA ==================
 void smocip_test_data_init(void) {
@@ -96,11 +105,48 @@ void smocip_send_can(uint8_t seq_index)
   canTransmit(canREG2, canMESSAGE_BOX20, tx_buf);
 }
 
-void smocip_rx_handle(uint8_t *data) 
+void smocip_rx_handle(uint8_t *data, can_source_t can_source)
 {
   uint8_t pkt_type;
   uint8_t seq_total;
   uint8_t seq_index;
+
+  /* =========================================================
+   * CAN1 / CAN2 REDUNDANCY CHECK
+   * ========================================================= */
+
+  if (can_source == CAN_SOURCE_1) 
+  {
+    /* If this exact frame was already received on CAN2,
+     * this is the redundant copy.
+     */
+    if (smocip_can2.valid && memcmp(smocip_can2.data, data, 8U) == 0) 
+    {
+      return;
+    }
+
+    /* New CAN1 frame - save it */
+    memcpy(smocip_can1.data, data, 8U);
+    smocip_can1.valid = 1U;
+  } 
+  else if (can_source == CAN_SOURCE_2) 
+  {
+    /* If this exact frame was already received on CAN1,
+     * this is the redundant copy.
+     */
+    if (smocip_can1.valid && memcmp(smocip_can1.data, data, 8U) == 0) 
+    {
+      return;
+    }
+
+    /* New CAN2 frame - save it */
+    memcpy(smocip_can2.data, data, 8U);
+    smocip_can2.valid = 1U;
+  } 
+  else 
+  {
+    return;
+  }
 
   pkt_type = data[0] & 0x0F;
 
@@ -108,7 +154,7 @@ void smocip_rx_handle(uint8_t *data)
 
   seq_index = (data[1] & 0xFC) >> 2;
 
-  if (seq_total != 1U)
+  if (seq_total != 0U)
     return;
 
   if (seq_index != 0U)

@@ -1,4 +1,5 @@
 #include "input_card.h"
+#include <string.h>
 
 input_card_data_t input_card_data[INPUT_CARD_COUNT]; // Raw data received from Input Cards
 field_input_t
@@ -6,6 +7,14 @@ field_input_t
                                      // will eventually store Key + Value
 input_mapping_t input_mapping[FIELD_INPUT_COUNT]; // will eventually tell us
                                                   // Card + Channel → Key
+
+typedef struct {
+  uint8_t data[8];
+  uint8_t valid;
+} input_card_can_frame_ctx_t;
+
+static input_card_can_frame_ctx_t input_card_can1[INPUT_CARD_COUNT];
+static input_card_can_frame_ctx_t input_card_can2[INPUT_CARD_COUNT];
 
 static uint8_t input_card_get_index(uint32_t can_id) 
 {
@@ -135,7 +144,7 @@ input_mapping_t input_mapping[FIELD_INPUT_COUNT] =
     {3U, 28U, KEY_LC9}
 };
 
-void input_card_rx_handler(uint32_t can_id, uint8_t *data) 
+void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_source) 
 {
     uint8_t index;
 
@@ -167,6 +176,45 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data)
     index = input_card_get_index(can_id);
 
     if (index == 0xFFU) 
+    {
+        return;
+    }
+
+    /* =========================================================
+    * CAN1 / CAN2 REDUNDANCY CHECK
+    * ========================================================= */
+
+    if (can_source == CAN_SOURCE_1)
+    {
+        /* If the same frame was already received on CAN2,
+        * this is the redundant copy.
+        */
+        if (input_card_can2[index].valid &&
+            memcmp(input_card_can2[index].data, data, 8U) == 0)
+        {
+            return;
+        }
+
+        /* New CAN1 frame - save it */
+        memcpy(input_card_can1[index].data, data, 8U);
+        input_card_can1[index].valid = 1U;
+    }
+    else if (can_source == CAN_SOURCE_2)
+    {
+        /* If the same frame was already received on CAN1,
+        * this is the redundant copy.
+        */
+        if (input_card_can1[index].valid &&
+            memcmp(input_card_can1[index].data, data, 8U) == 0)
+        {
+            return;
+        }
+
+        /* New CAN2 frame - save it */
+        memcpy(input_card_can2[index].data, data, 8U);
+        input_card_can2[index].valid = 1U;
+    }
+    else
     {
         return;
     }

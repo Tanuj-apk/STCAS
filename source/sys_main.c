@@ -220,6 +220,7 @@ void KavachInit(void)
     _enable_IRQ();
     canInit();
     canEnableErrorNotification(canREG1);
+    canEnableErrorNotification(canREG2);
 //    DMI_init();
 //    eqep_speed_init();
 
@@ -269,6 +270,7 @@ void v_5msTasks(void)
     {
         radio_build_fragment(tx_buf, RADIO_PKT_TYPE_ARP, radio_ctx.seq_total, frames_of_arp);
         canTransmit(canREG1, tx_mb, tx_buf);
+        canTransmit(canREG2, tx_mb, tx_buf);
         frames_of_arp += 1;
         if(frames_of_arp >= 5)
         {

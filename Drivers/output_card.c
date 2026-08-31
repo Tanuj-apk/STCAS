@@ -18,15 +18,16 @@ static void output_card_tx(uint16_t bits)
 
     tx_buf[0] = MSG_TYPE_OUTPUT_CARD_CMD;
 
-    /* Outputs 1–8 */
+    /* Outputs 1ï¿½8 */
     tx_buf[1] = (uint8_t)(bits & 0xFFU);
 
-    /* Outputs 9–16 */
+    /* Outputs 9ï¿½16 */
     tx_buf[2] = (uint8_t)((bits >> 8) & 0xFFU);
 
-    /* Bytes 3–7 reserved = 0 */
+    /* Bytes 3ï¿½7 reserved = 0 */
 
     canTransmit(canREG1, canMESSAGE_BOX11, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX11, tx_buf);
 }
 
 /* ============================================================
