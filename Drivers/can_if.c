@@ -97,14 +97,21 @@ void send_cpu_startup_can(void)
 /* ============================================================
  *  CPU UNIVERSAL ACK TX
  * ============================================================ */
-void send_cpu_universal_ack(uint8_t peripheral_id, uint8_t action_type, uint8_t ack_status)
+void send_cpu_universal_ack(uint16_t peripheral_can_id, uint8_t action_type, uint8_t ack_status)
 {
     uint8_t tx_buf[8] = {0};
-    tx_buf[0] = MSG_TYPE_CPU_UNIVERSAL_ACK;  /* 0x40 */
-    tx_buf[1] = peripheral_id;
+
+    /* Byte 0-1 : PERIPHERAL_CAN_ID */
+    tx_buf[0] = (uint8_t)((peripheral_can_id >> 8) & 0xFFU);  // MSB
+    tx_buf[1] = (uint8_t)(peripheral_can_id & 0xFFU);         // LSB
+
+    /* Byte 2 : ACTION_TYPE */
     tx_buf[2] = action_type;
+
+    /* Byte 3 : ACK_STATUS */
     tx_buf[3] = ack_status;
-    /* Bytes 4�7 are reserved and must be 0 */
+
+    /* Bytes 4-7 : RESERVED = 0 */
 
     canTransmit(canREG1, canMESSAGE_BOX9, tx_buf);
     canTransmit(canREG2, canMESSAGE_BOX9, tx_buf);

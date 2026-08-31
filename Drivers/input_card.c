@@ -223,6 +223,8 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         ((uint32_t)data[2]) | ((uint32_t)data[3] << 8) |
         ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
 
+    send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
+    
     card = index + 1U;
 
     for (uint16_t i = 0U; i < FIELD_INPUT_COUNT; i++) 

@@ -386,6 +386,9 @@ void v_100msTasks(void)
 
 void v_1sTasks(void)
 {
+    //! ========For testing CPU ACK=========
+    uint16_t a = 0x160U;
+    send_cpu_universal_ack(a, 0, CPU_ACK_OK);
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
     count++;

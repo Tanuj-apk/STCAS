@@ -175,4 +175,5 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
   smocip_rx.sos_ack = (data[7] >> 3) & 1U;
 
   smocip_rx.valid = 1U;
+  send_cpu_universal_ack((uint16_t)SMOCIP_RX_ID, ACK_ACTION_SMOCIP, CPU_ACK_OK);
 }

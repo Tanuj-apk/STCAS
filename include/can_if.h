@@ -20,6 +20,12 @@ typedef enum
 } can_source_t;
 
 /* ============================================================
+ * CPU UNIVERSAL ACK STATUS
+ * ============================================================ */
+#define CPU_ACK_OK 0x00U
+#define CPU_ACK_INVALID 0x01U
+
+/* ============================================================
  *  STARTUP ACK RANGE
  * ============================================================ */
 #define PERIPH_ACK_BASE_ID        0x081U
@@ -93,19 +99,17 @@ typedef enum
     ACK_ACTION_DIAGNOSTIC    = 0x05
 } cpu_ack_action_t;
 
-typedef enum
-{
-    CPU_ACK_OK       = 0x00,
-    CPU_ACK_REJECTED = 0x01,
-    CPU_ACK_INVALID  = 0x02,
-    CPU_ACK_BUSY     = 0x03
-} cpu_ack_status_t;
+// typedef enum
+// {
+//     CPU_ACK_OK       = 0x00,
+//     CPU_ACK_REJECTED = 0x01,
+//     CPU_ACK_INVALID  = 0x02,
+//     CPU_ACK_BUSY     = 0x03
+// } cpu_ack_status_t;
 
-void send_cpu_universal_ack(uint8_t peripheral_id,
-                            uint8_t action_type,
-                            uint8_t ack_status);
+void send_cpu_universal_ack(uint16_t peripheral_can_id, uint8_t action_type, uint8_t ack_status);
 
-typedef enum
+typedef enum 
 {
     GSM_1 = 0,
     GSM_2 = 1
