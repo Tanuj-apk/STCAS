@@ -2,6 +2,7 @@
 #define INPUT_CARD_H
 
 #include <stdint.h>
+#include "can_if.h"
 
 #define INPUT_CARD1_CAN_ID 0x150U
 #define INPUT_CARD2_CAN_ID 0x151U
@@ -169,7 +170,7 @@ typedef struct
   uint16_t key;
 } input_mapping_t;
 
-void input_card_rx_handler(uint32_t can_id, uint8_t *data);
+void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_source);
 uint8_t field_input_get_value(uint16_t key);
 
 #endif /* INPUT_CARD_H */

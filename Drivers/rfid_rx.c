@@ -992,7 +992,10 @@ void rfid_rx_handle(uint32_t can_id, uint8_t *data)
     if (!rfid_ctx.active)
     {
         rfid_ctx_reset();
-
+        if (seq_index != 0U)
+        {
+          return;
+        }
         rfid_ctx.active       = 1;
         // rfid_ctx.tag_type     = tag_type;
         // rfid_ctx.tag_instance = tag_instance;

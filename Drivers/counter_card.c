@@ -19,9 +19,10 @@ static void counter_card_tx(uint8_t status)
     /* Byte 0 contains all valid data */
     tx_buf[0] = status;
 
-    /* Bytes 3–7 reserved = 0 */
+    /* Bytes 3ï¿½7 reserved = 0 */
 
     canTransmit(canREG1, canMESSAGE_BOX15, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX15, tx_buf);
 }
 
 /* ============================================================

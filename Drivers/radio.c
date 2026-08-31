@@ -907,6 +907,7 @@ void radio_send_aap(radio_id_t radio_id)
     {
         radio_build_fragment(can_frame,RADIO_PKT_TYPE_AAP,radio_ctx.seq_total,i);
         canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
     radio_info_ack_tx_done();
 }
@@ -1002,6 +1003,7 @@ void radio_send_aep(radio_id_t radio_id)
     {
         radio_build_fragment(can_frame,RADIO_PKT_TYPE_AEP,radio_ctx.seq_total,i);
         canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
     radio_info_ack_tx_done();
 }
@@ -1916,6 +1918,7 @@ void radio_send_reg_type1(radio_id_t radio_id)
     {
         radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE1,radio_ctx.seq_total,i);
         canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
     radio_info_ack_tx_done();
 }
@@ -2129,6 +2132,7 @@ void radio_send_reg_type2(radio_id_t radio_id)
     {
         radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE2,radio_ctx.seq_total,i);
         canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
     }
     radio_info_ack_tx_done();
 }

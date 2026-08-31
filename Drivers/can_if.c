@@ -71,6 +71,8 @@ void send_cpu_time_can(void)
     tx_buf[4] = flags;
 
     canTransmit(canREG1, canMESSAGE_BOX1, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX1, tx_buf);
+
 }
 
 /* ============================================================
@@ -89,6 +91,7 @@ void send_cpu_startup_can(void)
     tx_buf[7] = 0x00U;
 
     canTransmit(canREG1, canMESSAGE_BOX2, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX2, tx_buf);
 }
 
 /* ============================================================
@@ -104,12 +107,13 @@ void send_cpu_universal_ack(uint8_t peripheral_id, uint8_t action_type, uint8_t 
     /* Bytes 4�7 are reserved and must be 0 */
 
     canTransmit(canREG1, canMESSAGE_BOX9, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX9, tx_buf);
 }
 
 /* ============================================================
  *  RX ROUTING ENTRY POINT
  * ============================================================ */
-void can_if_process_rx(uint32_t can_id, uint8_t *data)
+void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source)
 {
     /* ---------- STARTUP ACK ---------- */
     if (can_startup_in_progress())
@@ -151,7 +155,7 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data)
     //! 0x150,151,152 - Input Cards
     if ((can_id & INPUT_CARD_RX_MASK) == INPUT_CARD_RX_ID)
     {
-        input_card_rx_handler(can_id, data);
+        input_card_rx_handler(can_id, data, can_source);
         return;
     }
     /* ---- RADIO AAP RX ---- */
@@ -165,7 +169,7 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data)
     //! 0x221 - SMOCIP
     if (can_id == SMOCIP_RX_ID) 
     {
-        smocip_rx_handle(data);
+        smocip_rx_handle(data, can_source);
         return;
     }
 }
@@ -183,6 +187,7 @@ void send_cpu_heartbeat_can(void)
     tx_buf[3] = 0x01U;   /* CPU_STATE = RUN */
 
     canTransmit(canREG1, canMESSAGE_BOX4, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX4, tx_buf);
 }
 
 /* ============================================================
@@ -198,6 +203,7 @@ void send_gsm_start_req(uint8_t gsm_id, uint8_t action)
     tx_buf[3] = action;
 
     canTransmit(canREG1, canMESSAGE_BOX7, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX7, tx_buf);
 }
 
 void send_Counter_Change_req(uint8_t flagSet)
@@ -208,6 +214,7 @@ void send_Counter_Change_req(uint8_t flagSet)
     //tx_buf[0] |= (FutureUse << 5);
     //txbuf[1] to txbuf[7] reserved
     canTransmit(canREG1, canMESSAGE_BOX15, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX15, tx_buf);
 }
 
 void send_Data_Log(uint8_t count)
@@ -232,6 +239,7 @@ void send_Data_Log(uint8_t count)
         tx_data_log[15] = 0;
     }
     canTransmit(canREG1, canMESSAGE_BOX16, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX16, tx_buf);
 }
 
 /* ============================================================
@@ -240,6 +248,20 @@ void send_Data_Log(uint8_t count)
 void canMessageNotification(canBASE_t *node, uint32_t messageBox)
 {
 //    uint32_t rx_id;
+    can_source_t can_source;
+
+    if (node == canREG1) 
+    {
+        can_source = CAN_SOURCE_1;
+    } 
+    else if (node == canREG2) 
+    {
+        can_source = CAN_SOURCE_2;
+    } 
+    else 
+    {
+        return;
+    }
 
     if (messageBox == canMESSAGE_BOX19)
     {
@@ -247,7 +269,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         canGetData(node, messageBox, rx_dmi_pilot);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_dmi_pilot);
+        can_if_process_rx(rx_id, rx_dmi_pilot, can_source);
 
     }
     else if (messageBox == canMESSAGE_BOX3)
@@ -255,28 +277,28 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         canGetData(node, messageBox, rx_data_startup);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_startup);
+        can_if_process_rx(rx_id, rx_data_startup, can_source);
     }
     else if (messageBox == canMESSAGE_BOX5)
     {
         canGetData(node, messageBox, rx_data_heartbeat);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_heartbeat);
+        can_if_process_rx(rx_id, rx_data_heartbeat, can_source);
     }
     else if (messageBox == canMESSAGE_BOX6)
     {
         canGetData(node, messageBox, rx_data_rfid);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_rfid);
+        can_if_process_rx(rx_id, rx_data_rfid, can_source);
     }
     else if (messageBox == canMESSAGE_BOX8)
     {
         canGetData(node, messageBox, rx_data_gsm);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_gsm);
+        can_if_process_rx(rx_id, rx_data_gsm, can_source);
     }
     //! 0x150,151,152 - Primary Input Card
     else if (messageBox == canMESSAGE_BOX10) 
@@ -284,7 +306,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         canGetData(node, messageBox, rx_data_input_card);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_input_card);
+        can_if_process_rx(rx_id, rx_data_input_card, can_source);
     }
 
     //! 0X142- RADIO TIVA 1 
@@ -294,7 +316,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
         canGetData(node, messageBox, rx_data_radio);
         rx_id = canGetID(node, messageBox);
 
-        can_if_process_rx(rx_id, rx_data_radio);
+        can_if_process_rx(rx_id, rx_data_radio, can_source);
     } 
     //! 0x221 - SMOCIP
     else if (messageBox == canMESSAGE_BOX21) 
@@ -302,7 +324,7 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
       canGetData(node, messageBox, rx_data_smocip);
       rx_id = canGetID(node, messageBox);
 
-      can_if_process_rx(rx_id, rx_data_smocip);
+      can_if_process_rx(rx_id, rx_data_smocip, can_source);
     }
 }
 

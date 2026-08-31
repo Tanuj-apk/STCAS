@@ -2,6 +2,7 @@
 #define SMOCIP_H_
 
 #include <stdint.h>
+#include "can_if.h"
 
 #define SMOCIP_PKT_TYPE    0x01U
 #define SMOCIP_SEQ_TOTAL   0x03U
@@ -32,7 +33,7 @@ typedef struct {
 } smocip_rx_t;
 
 extern smocip_rx_t smocip_rx;
-void smocip_rx_handle(uint8_t *data);
+void smocip_rx_handle(uint8_t *data, can_source_t can_source);
 
 void smocip_build_payload(void);
 void smocip_send_can(uint8_t seq_index);

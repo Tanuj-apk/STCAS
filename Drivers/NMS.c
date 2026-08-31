@@ -1700,6 +1700,7 @@ void send_skavach_info_msg_to_nms(uint8_t skavach_info_frame_num)
 
     nms_build_fragment(can_frame,NMS_PKT_TYPE_INFO,nms_ctx.seq_total, skavach_info_frame_num);
     canTransmit(canREG1, NMS_TX_MB, can_frame);
+    canTransmit(canREG2, NMS_TX_MB, can_frame);
 }
 
 void send_skavach_health_msg_to_nms(uint8_t skavach_health_frame_num)
@@ -1713,6 +1714,7 @@ void send_skavach_health_msg_to_nms(uint8_t skavach_health_frame_num)
 
     nms_build_fragment(can_frame,NMS_PKT_TYPE_HEALTH,nms_ctx.seq_total, skavach_health_frame_num);
     canTransmit(canREG1, NMS_TX_MB, can_frame);
+    canTransmit(canREG2, NMS_TX_MB, can_frame);
 }
 
 void send_skavach_rssi_msg_to_nms(uint8_t skavach_rssi_frame_num)
@@ -1726,6 +1728,7 @@ void send_skavach_rssi_msg_to_nms(uint8_t skavach_rssi_frame_num)
 
     nms_build_fragment(can_frame,NMS_PKT_TYPE_RSSI,nms_ctx.seq_total, skavach_rssi_frame_num);
     canTransmit(canREG1, NMS_TX_MB, can_frame);
+    canTransmit(canREG2, NMS_TX_MB, can_frame);
 }
 
 void send_skavach_fault_msg_to_nms(uint8_t skavach_fault_frame_num)
@@ -1739,6 +1742,7 @@ void send_skavach_fault_msg_to_nms(uint8_t skavach_fault_frame_num)
 
     nms_build_fragment(can_frame,NMS_PKT_TYPE_FAULT,nms_ctx.seq_total, skavach_fault_frame_num);
     canTransmit(canREG1,NMS_TX_MB , can_frame);
+    canTransmit(canREG2,NMS_TX_MB , can_frame);
 }
 
 void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num)
@@ -1752,4 +1756,5 @@ void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num)
 
     nms_build_fragment(can_frame,NMS_PKT_TYPE_POS_INFO,nms_ctx.seq_total, stn_loco_postion_frame_num);
     canTransmit(canREG1,NMS_TX_MB, can_frame);
+    canTransmit(canREG2,NMS_TX_MB, can_frame);
 }
