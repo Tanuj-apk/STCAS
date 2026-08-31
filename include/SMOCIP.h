@@ -9,6 +9,7 @@
 
 #define SMOCIP_RX_ID 0x221U
 
+#define ACK_ACTION_SMOCIP SMOCIP_PKT_TYPE
 typedef struct
 {
     char     station_id[5];      // "12345"

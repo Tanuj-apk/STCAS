@@ -10,6 +10,7 @@
 #include <string.h>
 #include <math.h>
 
+static uint32_t radio_rx_can_id = 0;
 //! Hardcoded loco ID and prev_frame for testing Condition 24 in StateMachine.c
 uint32_t g_my_stn_id = 0x12345; // hardcoded for testing
 uint16_t approaching_station_id = 0; //Updated in rfid.c
@@ -708,7 +709,7 @@ static uint8_t radio_parse_orp(const uint8_t *p, uint16_t len)
 
 void radio_rx_handle(uint32_t can_id, uint8_t *data)
 {
-    (void)can_id;
+    radio_rx_can_id = can_id;
 
     /* ===== DEBUG COUNTER ===== */
     radio_rx_isr_count++;   /* increments on every CAN RX */
@@ -1243,10 +1244,18 @@ static void radio_process_complete_packet(void)
     {
     case RADIO_PKT_TYPE_ORP:
         result = radio_parse_orp(radio_rx_ctx.payload, radio_rx_ctx.payload_len);
+        if (result) 
+        {
+          send_cpu_universal_ack((uint16_t)radio_rx_can_id, ACK_ACTION_RADIO_ORP, CPU_ACK_OK);
+        }
         break;
 
     case RADIO_PKT_TYPE_ARP:
         result = radio_parse_arp(radio_rx_ctx.payload, radio_rx_ctx.payload_len);
+        if (result) 
+        {
+          send_cpu_universal_ack((uint16_t)radio_rx_can_id, ACK_ACTION_RADIO_ARP, CPU_ACK_OK);
+        }
         break;
 
     default:

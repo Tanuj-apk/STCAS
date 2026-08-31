@@ -63,6 +63,12 @@ typedef struct
 #define RADIO_PKT_TYPE_REG_TYPE2   0x05U
 #define RADIO_PKT_TYPE_AEP   0x06U
 
+/* ============================================================
+ *  RADIO UNIVERSAL ACK ACTION TYPES
+ * ============================================================ */
+#define ACK_ACTION_RADIO_ARP        RADIO_PKT_TYPE_ARP
+#define ACK_ACTION_RADIO_ORP        RADIO_PKT_TYPE_ORP
+
 //#define RADIO_PKT_TYPE_REG_TYPE  0x09U
 
 typedef struct
