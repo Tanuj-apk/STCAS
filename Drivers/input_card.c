@@ -156,33 +156,8 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data)
 
     if (seq_total != 1U) 
     {
-        /* -------- LEADING / NON-LEADING -------- */
-
-//        uint8_t cab1_leading  = (in >> IN_LEADING_CAB1) & 1U;
-//        uint8_t cab2_leading = (in >> IN_LEADING_CAB2) & 1U;
-
-//        /* Clear previous bits (important) */
-//        input_write.raw_flags[0] &= ~((1U << 2) | (1U << 3));
-//
-//        if (cab1_leading && cab2_leading)
-//        {
-//            input_write.raw_flags[0] |= (1U << 3);   // Condition 4
-//        }
-//        else if (!cab1_leading && !cab2_leading)
-//        {
-//            input_write.raw_flags[0] |= (1U << 2);   // Condition 3
-//        }
-//        else
-//        {
-//            // TODO: fault handling
-//            // mismatch ? handle later
-//        }
-
-        /* -------- CAB OCCUPANCY LOGIC -------- */
-
-//        uint8_t cab1_active  = (in >> IN_ACTIVE_CAB1) & 1U;
-//        uint8_t cab2_active = (in >> IN_ACTIVE_CAB2) & 1U;
-//        static uint8_t prev_active_cab = 0;
+        return;
+    }
 
     if (seq_index != 0U) 
     {
@@ -191,52 +166,31 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data)
 
     index = input_card_get_index(can_id);
 
-        //!Added by Tanuj
-//        uint8_t fwd_cab1 = (in >> IN_FORWARD_HANDLE_CAB1) & 1U;
-//        uint8_t rev_cab1 = (in >> IN_REVERSE_HANDLE_CAB1) & 1U;
-//
-//        uint8_t fwd_cab2 = (in >> IN_FORWARD_HANDLE_CAB2) & 1U;
-//        uint8_t rev_cab2 = (in >> IN_REVERSE_HANDLE_CAB2) & 1U;
+    if (index == 0xFFU) 
+    {
+        return;
+    }
 
-//        uint8_t fwd = 0;
-//        uint8_t rev = 0;
+    input_card_data[index].inputs =
+        ((uint32_t)data[2]) | ((uint32_t)data[3] << 8) |
+        ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
 
-//        if (cab1_active && !cab2_active)
-//        {
-//            fwd = fwd_cab1;
-//            rev = rev_cab1;
-//        }
-//        else if (cab2_active && !cab1_active)
-//        {
-//            fwd = fwd_cab2;
-//            rev = rev_cab2;
-//        }
-//        else
-//        {
-//            fwd = 0;
-//            rev = 0;
-//        }
+    card = index + 1U;
+
+    for (uint16_t i = 0U; i < FIELD_INPUT_COUNT; i++) 
+    {
+        if (input_mapping[i].card != card) 
+        {
+            continue;
+        }
 
         channel = input_mapping[i].channel;
         key = input_mapping[i].key;
 
-        /* =========================================
-        * KAVACH ISOLATION LOGIC
-        * ========================================= */
-
-//        uint8_t kavach_iso = (in >> IN_KAVACH_ISO_FBK) & 1U;
-
-//        /* Clear relevant bits first */
-//        input_write.raw_flags[0] &= ~((1U << 0) | (1U << 1));
-//
-//        if (kavach_iso)
-//        {
-//            input_write.raw_flags[0] |= (1U << 1);   // Condition 2: isolated
-//        }
-//        else
-//        {
-//            input_write.raw_flags[0] |= (1U << 0);   // Condition 1: not isolated
-//        }
+        /*
+        * Extract the corresponding channel bit.
+        */
+        field_input_set_value(key, (uint8_t)((inputs >> channel) & 0x01U));
     }
 }
 
