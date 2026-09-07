@@ -72,6 +72,8 @@
 #include "system.h"
 #include "input_card.h"
 #include "SMOCIP.h"
+#include "spi.h"
+#include "hcms3902.h"
 //#include "BIUController.h"
 /* USER CODE END */
 
@@ -114,7 +116,7 @@ int main(void)
 {
 /* USER CODE BEGIN (3) */
     KavachInit();
-
+    HCMS_DisplayString(" OK ");
     while (1)
     {
         //        if(!can_manager_poll_startup())
@@ -223,6 +225,10 @@ void KavachInit(void)
     canEnableErrorNotification(canREG2);
 //    DMI_init();
 //    eqep_speed_init();
+    //LED STATUS INIT
+    gioInit();
+    spiInit();
+    HCMS_Init();
 
     /* Start RTI for fallback timer + uptime */
     rtiInit();  // ensure RTI started (if not auto from systemInit)
