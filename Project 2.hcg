@@ -350,8 +350,7 @@
         <NAME>eqep.h</NAME>
       </HDREQEP>
       <SRCEQEP>
-        <NAME>eqep.c</NAME>
-      </SRCEQEP>
+        </SRCEQEP>
       <HDR1FEE>
         <NAME>Device_TMS570LS12.h</NAME>
       </HDR1FEE>
@@ -620,7 +619,7 @@
         <PATH>include\eqep.h</PATH>
       </HDREQEP>
       <SRCEQEP>
-        <PATH>source\eqep.c</PATH>
+        <PATH></PATH>
       </SRCEQEP>
     </FILENAMES>
   </EQEP>
