@@ -39,6 +39,19 @@ uint32_t calculated_train_length = 0U;
 
 static uint8_t tlm_active = 0;
 
+/* ============================================================
+ *  RADIO ACK STATUS
+ * ============================================================ */
+
+volatile uint8_t radio1_ack_received = 0U;
+volatile uint8_t radio2_ack_received = 0U;
+
+volatile uint8_t radio1_ack_action = 0U;
+volatile uint8_t radio2_ack_action = 0U;
+
+volatile uint8_t radio1_ack_status = 0U;
+volatile uint8_t radio2_ack_status = 0U;
+
 //!=========== Info Ack implementation =================
 #define INFO_ACK_QUEUE_SIZE 16
 #define INFO_ACK_REPEAT_COUNT 5
@@ -703,6 +716,60 @@ static uint8_t radio_parse_orp(const uint8_t *p, uint16_t len)
 
     g_orp = orp;
     return 1;
+}
+
+/* ============================================================
+ *  RADIO ACK RX HANDLER
+ * ============================================================ */
+void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
+{
+    uint16_t ack_can_id;
+    uint8_t action_type;
+    uint8_t ack_status;
+
+    /* --------------------------------------------------------
+     * ACK payload:
+     *
+     * Byte 0 : ACK_CAN_ID MSB
+     * Byte 1 : ACK_CAN_ID LSB
+     * Byte 2 : ACTION_TYPE
+     * Byte 3 : ACK_STATUS
+     * Byte 4-7 : RESERVED
+     * -------------------------------------------------------- */
+
+    ack_can_id = ((uint16_t)data[0] << 8)
+               |  (uint16_t)data[1];
+
+    action_type = data[2];
+    ack_status  = data[3];
+
+    /* --------------------------------------------------------
+     * Verify ACTION_TYPE is ARP or ORP
+     * -------------------------------------------------------- */
+    if ((action_type != ACK_ACTION_RADIO_AAP) &&
+        (action_type != ACK_ACTION_RADIO_AEP) &&
+        (action_type != ACK_ACTION_RADIO_REG_TYPE1) &&
+        (action_type != ACK_ACTION_RADIO_REG_TYPE2))
+    {
+        return;
+    }
+
+    /* --------------------------------------------------------
+     * Store ACK according to the Radio that sent it
+     * -------------------------------------------------------- */
+
+    if (can_id == RADIO1_ACK_CAN_ID)
+    {
+        radio1_ack_received = 1U;
+        radio1_ack_action   = action_type;
+        radio1_ack_status   = ack_status;
+    }
+    else
+    {
+        radio2_ack_received = 1U;
+        radio2_ack_action   = action_type;
+        radio2_ack_status   = ack_status;
+    }
 }
 
 /* ================= RX ================= */

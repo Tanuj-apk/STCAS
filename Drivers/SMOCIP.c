@@ -16,6 +16,10 @@ typedef struct {
 static smocip_can_frame_ctx_t smocip_can1;
 static smocip_can_frame_ctx_t smocip_can2;
 
+volatile uint8_t smocip_ack_received = 0U;
+volatile uint8_t smocip_ack_action = 0U;
+volatile uint8_t smocip_ack_status = 0U;
+
 //! ============ TEST DATA ==================
 void smocip_test_data_init(void) {
   /* Station ID = "12345" */
@@ -101,8 +105,8 @@ void smocip_send_can(uint8_t seq_index)
   tx_buf[6] = smocip_payload[(seq_index * 6U) + 4];
   tx_buf[7] = smocip_payload[(seq_index * 6U) + 5];
 
-  canTransmit(canREG1, canMESSAGE_BOX20, tx_buf);
-  canTransmit(canREG2, canMESSAGE_BOX20, tx_buf);
+  canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
+  canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
 }
 
 void smocip_rx_handle(uint8_t *data, can_source_t can_source)
@@ -176,4 +180,31 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
 
   smocip_rx.valid = 1U;
   send_cpu_universal_ack((uint16_t)SMOCIP_RX_ID, ACK_ACTION_SMOCIP, CPU_ACK_OK);
+}
+
+void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data)
+{
+    uint16_t ack_can_id;
+    uint8_t action_type;
+    uint8_t ack_status;
+
+    /* Byte 0-1 : ACK_CAN_ID */
+    ack_can_id = ((uint16_t)data[0] << 8) |
+                 (uint16_t)data[1];
+
+    /* ACK must belong to SMOCIP */
+    if (ack_can_id != SMOCIP_TX_CAN_ID)
+    {
+        return;
+    }
+
+    /* Byte 2 : ACTION_TYPE */
+    action_type = data[2];
+
+    /* Byte 3 : ACK_STATUS */
+    ack_status = data[3];
+
+    smocip_ack_received = 1U;
+    smocip_ack_action   = action_type;
+    smocip_ack_status   = ack_status;
 }

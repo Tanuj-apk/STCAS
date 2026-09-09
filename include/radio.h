@@ -42,6 +42,19 @@ void radio_poll_1s(void);
 #define RADIO_MAX_PAYLOAD_LEN  128 * 11   //1 byte Sequence Total with 5.5 bytes payload per sequence
 #define RADIO_CRC_SIZE 4U
 
+/* ============================================================
+ *  RADIO CAN IDs
+ * ============================================================ */
+
+#define RADIO1_TX_CAN_ID 0x0140U
+#define RADIO2_TX_CAN_ID 0x0141U
+
+#define RADIO1_ACK_CAN_ID 0x0142U
+#define RADIO2_ACK_CAN_ID 0x0143U
+
+#define RADIO_ACK_RX_BASE_ID 0x0142U
+#define RADIO_ACK_RX_MASK 0x000007FEU
+
 /* ================= RX CONTEXT ================= */
 
 typedef struct
@@ -66,10 +79,14 @@ typedef struct
 /* ============================================================
  *  RADIO UNIVERSAL ACK ACTION TYPES
  * ============================================================ */
-#define ACK_ACTION_RADIO_ARP        RADIO_PKT_TYPE_ARP
-#define ACK_ACTION_RADIO_ORP        RADIO_PKT_TYPE_ORP
+#define ACK_ACTION_RADIO_AAP              RADIO_PKT_TYPE_AAP
+#define ACK_ACTION_RADIO_AEP              RADIO_PKT_TYPE_AEP
+#define ACK_ACTION_RADIO_REG_TYPE1        RADIO_PKT_TYPE_REG_TYPE1
+#define ACK_ACTION_RADIO_REG_TYPE2        RADIO_PKT_TYPE_REG_TYPE2
 
 //#define RADIO_PKT_TYPE_REG_TYPE  0x09U
+#define ACK_ACTION_RADIO_ARP RADIO_PKT_TYPE_ARP
+#define ACK_ACTION_RADIO_ORP RADIO_PKT_TYPE_ORP
 
 typedef struct
 {
@@ -299,10 +316,6 @@ void radio_send_arp(radio_id_t radio_id);
 void radio_update_frame_number(void);
 void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_total, uint8_t seq_index);
 
-/* New */
-void radio_send_orp(radio_id_t radio_id);
-
-uint8_t radio_parse_reg_type1(const uint8_t *p, uint16_t len, radio_reg_type1_t *out);
-uint8_t radio_parse_reg_type2(const uint8_t *p, uint16_t len, radio_reg_type2_t *out);
+void radio_ack_rx_handle(uint32_t can_id, uint8_t *data);
 
 #endif /* RADIO_H */
