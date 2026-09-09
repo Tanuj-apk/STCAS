@@ -575,6 +575,29 @@ typedef struct
 
 extern nms_tx_ctx_t nms_ctx;
 
+//typedef enum
+//{
+//    NMS_can_info_transmit_flag = 0,
+//    NMS_can_pos_info_transmit_flag,
+//    NMS_can_health_transmit_flag,
+//    NMS_can_rssi_transmit_flag,
+//    NMS_can_fault_transmit_flag,
+//};
+
+extern uint8_t NMS_can_info_transmit_flag;
+extern uint8_t NMS_can_pos_info_transmit_flag;
+extern uint8_t NMS_can_health_transmit_flag;
+extern uint8_t NMS_can_rssi_transmit_flag;
+extern uint8_t NMS_can_fault_transmit_flag;
+
+extern uint8_t NMS_can_current_transmit_msg;
+
+extern uint8_t skavach_info_frame_num;
+extern uint8_t skavach_health_frame_num;
+extern uint8_t skavach_rssi_frame_num;
+extern uint8_t skavach_fault_frame_num;
+extern uint8_t stn_loco_postion_frame_num;
+
 void send_skavach_info_msg_to_nms(uint8_t skavach_info_frame_num);
 //uint16_t send_skavach_info_msg_to_nms(uint8_t *buf);
 

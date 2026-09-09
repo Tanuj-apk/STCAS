@@ -917,22 +917,22 @@ void rfid_process_complete_tag(void)
 //        current_tag_dup_type |= (1 << juntag.tag_duplicate);
 //    }
 
-    uint8_t match_found = 0xFF;
-    match_index = 0xFF;
-
-    for(uint8_t i = 0; i < reg_type1.TLI_Packet_reg_type1.route_rfid_cnt; i++)
-    {
-        if(reg_type1.TLI_Packet_reg_type1.nxt_rfid_tag_id[i] == current_tag_id)
-        {
-            match_found = 1;
-            match_index = i;
-            break;
-        }
-        else 
-        {
-            match_found = 0;
-        }
-    }
+//    uint8_t match_found = 0xFF;
+//    match_index = 0xFF;
+//
+//    for(uint8_t i = 0; i < reg_type1.TLI_Packet_reg_type1.route_rfid_cnt; i++)
+//    {
+//        if(reg_type1.TLI_Packet_reg_type1.nxt_rfid_tag_id[i] == current_tag_id)
+//        {
+//            match_found = 1;
+//            match_index = i;
+//            break;
+//        }
+//        else
+//        {
+//            match_found = 0;
+//        }
+//    }
 
 //    if(match_found == 0)
 //    {
@@ -952,8 +952,8 @@ void rfid_process_complete_tag(void)
 //    }
 
 //    prev_tag_id = current_tag_id;
-    rfid_Count++;
-    rfid_Miss_Count = 0;
+//    rfid_Count++;
+//    rfid_Miss_Count = 0;
 }
 
 void rfid_rx_handle(uint32_t can_id, uint8_t *data)

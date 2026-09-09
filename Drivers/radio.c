@@ -359,7 +359,7 @@ static uint8_t radio_build_arp_payload(uint8_t *payload)
     /* =========================================================
      * FRAME 0  ? payload[0–5]
      * ========================================================= */
-    uint32_t source_loco_id /*= g_my_loco_id*/;
+    uint32_t source_loco_id = 0;
 
     /* PKT_TYPE : 4 bits */
     set_bits(payload, bit_index, 4, RADIO_PKT_TYPE_ARP);
@@ -386,7 +386,7 @@ static uint8_t radio_build_arp_payload(uint8_t *payload)
     uint32_t abs_loc = radio_get_latest_abs_loc();
     // uint16_t train_length = 0; // TODO: Trail length measurement implementation
     uint16_t train_length = (uint16_t)calculated_train_length;
-    uint16_t train_speed /*= (uint16_t)speed_kmh*/;
+    uint16_t train_speed = 0;
     uint8_t movement_dir = 0;
 
     if (trainDir == 0)
@@ -425,7 +425,7 @@ static uint8_t radio_build_arp_payload(uint8_t *payload)
     /* =========================================================
      * FRAME 2  ? payload[12–17]
      * ========================================================= */
-    uint8_t loco_mode /*= (uint8_t)g_current*/;
+    uint8_t loco_mode = 0;
     uint8_t emg_status = 0; //TODO: Add emergency state
     uint8_t dbnum;
 
@@ -974,8 +974,7 @@ static uint8_t radio_build_aep_payload(uint8_t *buf)
     set_bits(buf, bit_index, 23, stn_abs_loc);
     bit_index += 23;
 
-    uint32_t gen_sos_call /*= g_my_loco_id*/;
-
+    uint32_t gen_sos_call = 0;
     /* GENERAL_SOS_CALL : 1 bit */
     set_bits(payload, bit_index, 1, gen_sos_call);
     bit_index += 1;
@@ -1348,7 +1347,7 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
 
     uint16_t MA_pkt_start = bit_index;
     /*MA Packet Parsing*/
-    uint8_t sub_pkt_type /*= g_my_loco_id*/;
+    uint8_t sub_pkt_type = 0;
     /* SUB_PKT_TYPE (4 bits) */
     set_bits(payload, bit_index, 4, sub_pkt_type);
     bit_index += 4;
@@ -1720,17 +1719,17 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
 
     for(uint8_t i = 0; i < route_rfid_cnt; i++)
     {
-        uint16_t dist_nxt_rfid;
+        uint16_t dist_nxt_rfid = 0;
         /* DIST_NXT_RFID (11 bits) */
         set_bits(payload, bit_index, 11, dist_nxt_rfid);
         bit_index += 11;
 
-        uint16_t nxt_rfid_tag_id;
+        uint16_t nxt_rfid_tag_id = 0;
         /* NXT_RFID_TAG_ID (10 bits) */
         set_bits(payload, bit_index, 10, nxt_rfid_tag_id);
         bit_index += 10;
 
-        uint8_t dup_tag_dir;
+        uint8_t dup_tag_dir = 0;
         /* DUP_TAG_DIR (1 bit)*/
         set_bits(payload, bit_index, 1, dup_tag_dir);
         bit_index += 1;
@@ -1766,7 +1765,7 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
 
     for(uint8_t i = 0; i <= adj_line_cnt; i++)
     {
-        uint16_t line_tin;
+        uint16_t line_tin = 0;
         /* LINE_TIN (9 bits) */
         set_bits(payload, bit_index, 9, line_tin);
         bit_index += 9;
@@ -1784,34 +1783,34 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*TCD Packet Parsing*/
     uint16_t TCD_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_tc;
+    uint8_t sub_pkt_type_tc = 0;
     /* SUB_PKT_TYPE (TC) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_tc);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_tc;
+    uint8_t sub_pkt_len_tc = 0;
     /* SUB_PKT_LEN_TC (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_tc);
     bit_index += 7;
 
-    uint8_t trackcond_cnt;
+    uint8_t trackcond_cnt = 0;
     /* TRACKCOND_CNT (4 bits) */
     set_bits(payload, bit_index, 4, trackcond_cnt);
     bit_index += 4;
 
     for(uint8_t i = 0; i < trackcond_cnt; i++)
     {
-        uint8_t trackcond_type;
+        uint8_t trackcond_type = 0;
         /* TRACKCOND_TYPE (4 bits) */
         set_bits(payload, bit_index, 4, trackcond_type);
         bit_index += 4;
 
-        uint16_t start_dist_trackcond;
+        uint16_t start_dist_trackcond = 0;
         /* START_DIST_TRACKCOND (15 bits) */
         set_bits(payload, bit_index, 15, start_dist_trackcond);
         bit_index += 15;
 
-        uint16_t length_trackcond;
+        uint16_t length_trackcond = 0;
         /* LENGTH_TRACKCOND (15 bits) */
         set_bits(payload, bit_index, 15, length_trackcond);
         bit_index += 15;
@@ -1829,44 +1828,44 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     /*TSR Packet Parsing*/
     uint16_t TSR_pkt_start = bit_index;
 
-    uint8_t sub_pkt_type_tsr;
+    uint8_t sub_pkt_type_tsr = 0;
     /* SUB_PKT_TYPE (TSR) (4 bits)*/
     set_bits(payload, bit_index, 4, sub_pkt_type_tsr);
     bit_index += 4;
 
-    uint8_t sub_pkt_len_tsr;
+    uint8_t sub_pkt_len_tsr = 0;
     /* SUB_PKT_LEN_TSR (7 bits) */
     set_bits(payload, bit_index, 7, sub_pkt_len_tsr);
     bit_index += 7;
 
-    uint8_t tsr_status;
+    uint8_t tsr_status = 0;
     /* TSR_STATUS (2 bits) */
     set_bits(payload, bit_index, 2, tsr_status);
     bit_index += 2;
 
-    uint8_t tsr_info_cnt;
+    uint8_t tsr_info_cnt = 0;
     /* TSR_Info_CNT (5 bits) */
     set_bits(payload, bit_index, 5, tsr_info_cnt);
     bit_index += 5;
 
     for(uint8_t i = 0; i < tsr_info_cnt; i++)
     {
-        uint8_t tsr_id;
+        uint8_t tsr_id = 0;
         /* TSR_ID (8 bits) */
         set_bits(payload, bit_index, 8, tsr_id);
         bit_index += 8;
 
-        uint16_t tsr_distance;
+        uint16_t tsr_distance = 0;
         /* TSR_DISTANCE (15 bits) */
         set_bits(payload, bit_index, 15, tsr_distance);
         bit_index += 15;
 
-        uint16_t tsr_length;
+        uint16_t tsr_length = 0;
         /* TSR_LENGTH (15 bits) */
         set_bits(payload, bit_index, 15, tsr_length);
         bit_index += 15;
 
-        uint8_t tsr_class;
+        uint8_t tsr_class = 0;
         /* TSR_CLASS (1 bit)*/
         set_bits(payload, bit_index, 1, tsr_class);
         bit_index += 1;
@@ -1874,26 +1873,26 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
         /* SPEEDS (6 bits each)*/
         if(tsr_class == 0)
         {
-            uint8_t tsr_universal_speed;
+            uint8_t tsr_universal_speed = 0;
             set_bits(payload, bit_index, 6, tsr_universal_speed);
             bit_index += 6;
         }
         else if(tsr_class == 1)
         {
-            uint8_t tsr_class_a_speed;
+            uint8_t tsr_class_a_speed = 0;
             set_bits(payload, bit_index, 6, tsr_class_a_speed);
             bit_index += 6;
 
-            uint8_t tsr_class_b_speed;
+            uint8_t tsr_class_b_speed = 0;
             set_bits(payload, bit_index, 6, tsr_class_b_speed);
             bit_index += 6;
 
-            uint8_t tsr_class_c_speed;
+            uint8_t tsr_class_c_speed = 0;
             set_bits(payload, bit_index, 6, tsr_class_c_speed);
             bit_index += 6;
         }
 
-        uint8_t tsr_info_cnt;
+        uint8_t tsr_info_cnt = 0;
         /* TSR_WHISTLE (2 bits) */
         set_bits(payload, bit_index, 2, tsr_info_cnt);
         bit_index += 2;
@@ -1969,27 +1968,27 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     set_bits(buf, bit_index, 3, source_stn_version);
     bit_index += 3;
 
-    uint32_t dest_loco_id /*= g_my_loco_id*/;
+    uint32_t dest_loco_id = 0;
     /* DEST_LOCO_ID : 20 bits */
     set_bits(payload, bit_index, 20, dest_loco_id);
     bit_index += 20;
 
-    uint8_t ref_prof_id /*= g_my_loco_id*/;
+    uint8_t ref_prof_id = 0;
     /* REF_PROF_ID (4 bits) */
     set_bits(payload, bit_index, 4, ref_prof_id);
     bit_index += 4;
 
-    uint16_t last_ref_rfid /*= g_my_loco_id*/;
+    uint16_t last_ref_rfid = 0;
     /* LAST_REF_RFID (10 bits) */
     set_bits(payload, bit_index, 10, last_ref_rfid);
     bit_index += 10;
 
-    uint16_t dist_pkt_start /*= g_my_loco_id*/;
+    uint16_t dist_pkt_start = 0;
     /* DIST_PKT_START (15 bits) */
     set_bits(payload, bit_index, 15, dist_pkt_start);
     bit_index += 15;
 
-    uint8_t pkt_dir /*= g_my_loco_id*/;
+    uint8_t pkt_dir = 0;
     /* PKT_DIR (2 bits) */
     set_bits(payload, bit_index, 2, pkt_dir);
     bit_index += 2;
@@ -2001,7 +2000,7 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
 
     uint16_t MA_pkt_start = bit_index;
     /*MA Packet Parsing*/
-    uint8_t sub_pkt_type /*= g_my_loco_id*/;
+    uint8_t sub_pkt_type = 0;
     /* SUB_PKT_TYPE (4 bits) */
     set_bits(payload, bit_index, 4, sub_pkt_type);
     bit_index += 4;
