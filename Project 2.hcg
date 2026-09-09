@@ -218,7 +218,9 @@
       <HDRGIO>
         <NAME>gio.h</NAME>
       </HDRGIO>
-      <SRCGIO/>
+      <SRCGIO>
+        <NAME>gio.c</NAME>
+      </SRCGIO>
       <HDRSCI_R>
         <NAME>reg_sci.h</NAME>
       </HDRSCI_R>
@@ -248,7 +250,9 @@
       <HDRSPI>
         <NAME>spi.h</NAME>
       </HDRSPI>
-      <SRCSPI/>
+      <SRCSPI>
+        <NAME>spi.c</NAME>
+      </SRCSPI>
       <HDRCAN_R>
         <NAME>reg_can.h</NAME>
       </HDRCAN_R>
@@ -345,7 +349,9 @@
       <HDREQEP>
         <NAME>eqep.h</NAME>
       </HDREQEP>
-      <SRCEQEP/>
+      <SRCEQEP>
+        <NAME>eqep.c</NAME>
+      </SRCEQEP>
       <HDR1FEE>
         <NAME>Device_TMS570LS12.h</NAME>
       </HDR1FEE>
@@ -423,7 +429,7 @@
         <PATH>include\gio.h</PATH>
       </HDRGIO>
       <SRCGIO>
-        <PATH/>
+        <PATH>source\gio.c</PATH>
       </SRCGIO>
     </FILENAMES>
   </GIO>
@@ -475,7 +481,7 @@
         <PATH>include\spi.h</PATH>
       </HDRSPI>
       <SRCSPI>
-        <PATH/>
+        <PATH>source\spi.c</PATH>
       </SRCSPI>
     </FILENAMES>
   </SPI>
@@ -614,7 +620,7 @@
         <PATH>include\eqep.h</PATH>
       </HDREQEP>
       <SRCEQEP>
-        <PATH/>
+        <PATH>source\eqep.c</PATH>
       </SRCEQEP>
     </FILENAMES>
   </EQEP>
