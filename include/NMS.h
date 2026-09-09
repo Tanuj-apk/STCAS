@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define NMS_TX_CAN_ID 0x0220U
+#define NMS_ACK_CAN_ID 0x0221U
+
 #define NMS_TX_MB               canMESSAGE_BOX20
 #define NMS_MAX_FAULT_CODES    10U
 
@@ -605,5 +608,7 @@ void send_skavach_health_msg_to_nms(uint8_t skavach_health_frame_num);
 void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num);
 void send_skavach_fault_msg_to_nms(uint8_t skavach_fault_frame_num);
 void send_skavach_rssi_msg_to_nms(uint8_t skavach_rssi_frame_num);
+
+void nms_ack_rx_handle(uint32_t can_id, uint8_t *data);
 
 #endif

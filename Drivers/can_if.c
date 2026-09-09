@@ -7,6 +7,7 @@
 #include "radio.h"
 #include <stdio.h>
 #include "SMOCIP.h"
+#include "NMS.h"
 //#include "StateMachine.h"
 //#include "dmi_can.h"
 
@@ -32,7 +33,13 @@ static uint8_t rx_data_radio[8];
 static uint32_t rx_id;
 static uint8_t rx_dmi_pilot[8];
 static uint8_t rx_data_smocip[8];
+static uint8_t rx_ack_counter_card[8];
+static uint8_t rx_ack_datalogger[8];
+static uint8_t rx_ack_nms[8];
 
+volatile uint8_t data_logger_ack_received;
+volatile uint8_t data_logger_ack_action;
+volatile uint8_t data_logger_ack_status;
 /* ============================================================
  *  TX BUFFERS
  * ============================================================ */
@@ -118,6 +125,88 @@ void send_cpu_universal_ack(uint16_t peripheral_can_id, uint8_t action_type, uin
 }
 
 /* ============================================================
+ *  COUNTER CARD ACK RX
+ * ============================================================ */
+
+static void counter_card_ack_rx_handle(uint32_t can_id, uint8_t *data)
+{
+    uint16_t ack_can_id;
+    uint8_t action_type;
+    uint8_t ack_status;
+
+    /* CAN ID should be 0x201 */
+    if (can_id != COUNTER_CARD_ACK_CAN_ID)
+    {
+        return;
+    }
+
+    /* Byte 0-1 : ACK_CAN_ID */
+    ack_can_id = ((uint16_t)data[0] << 8) | (uint16_t)data[1];
+
+    /* Byte 2 : ACTION_TYPE */
+    action_type = data[2];
+
+    /* Byte 3 : ACK_STATUS */
+    ack_status = data[3];
+
+    /*
+    * For Counter Card command:
+    *
+    * CPU TX CAN ID = 0x200
+    *
+    * Therefore ACK must contain:
+    * ACK_CAN_ID = 0x0200
+    */
+    if (ack_can_id != 0x0200U)
+    {
+        return;
+    }
+
+    /*
+    * At this point the ACK is a valid acknowledgement
+    * for the Counter Card command.
+    *
+    * Add application handling here.
+    */
+}
+
+/* ============================================================
+ *  DATALOGGER ACK RX
+ * ============================================================ */
+static void data_logger_ack_rx_handle(uint32_t can_id, uint8_t *data)
+{
+    uint16_t ack_can_id;
+    uint8_t action_type;
+    uint8_t ack_status;
+
+    if (can_id != DATA_LOGGER_ACK_CAN_ID)
+    {
+        return;
+    }
+
+    /* Byte 0-1 : ACK_CAN_ID */
+    ack_can_id = ((uint16_t)data[0] << 8) |
+                 (uint16_t)data[1];
+
+    /* Byte 2 : ACTION_TYPE */
+    action_type = data[2];
+
+    /* Byte 3 : ACK_STATUS */
+    ack_status = data[3];
+
+    /* ACK must belong to Data Logger */
+    if (ack_can_id != DATA_LOGGER_TX_CAN_ID)
+    {
+        return;
+    }
+
+    /* Store/process ACK */
+    data_logger_ack_received = 1U;
+    data_logger_ack_action = action_type;
+    data_logger_ack_status = ack_status;
+}
+
+/* ============================================================
  *  RX ROUTING ENTRY POINT
  * ============================================================ */
 void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source)
@@ -170,13 +259,58 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source)
     //! 0X143- RADIO TIVA 2
     if ((can_id & RADIO_AAP_RX_MASK) == RADIO_AAP_RX_BASE_ID)
     {
-        radio_rx_handle(can_id, data);
+        uint16_t ack_can_id;
+
+        ack_can_id = ((uint16_t)data[0] << 8) | (uint16_t)data[1];
+
+        if ((ack_can_id == RADIO1_TX_CAN_ID) || (ack_can_id == RADIO2_TX_CAN_ID))
+        {
+            radio_ack_rx_handle(can_id, data);
+        }
+        else
+        {
+            radio_rx_handle(can_id, data);
+        }
         return;
     }
-    //! 0x221 - SMOCIP
-    if (can_id == SMOCIP_RX_ID) 
+    //! 0x231 - SMOCIP
+    if (can_id == SMOCIP_RX_ID)
     {
-        smocip_rx_handle(data, can_source);
+        uint16_t ack_can_id;
+
+        ack_can_id = ((uint16_t)data[0] << 8) |
+                     (uint16_t)data[1];
+
+        if (ack_can_id == SMOCIP_TX_CAN_ID)
+        {
+            smocip_ack_rx_handle(can_id, data);
+        }
+        else
+        {
+            smocip_rx_handle(data, can_source);
+        }
+
+        return;
+    }
+    /* ---------- COUNTER CARD ACK RX ---------- */
+    //! 0x201
+    if (can_id == COUNTER_CARD_ACK_CAN_ID)
+    {
+        counter_card_ack_rx_handle(can_id, data);
+        return;
+    }
+    /* ---------- DATALOGGER ACK RX ---------- */
+    //! 0x211
+    if (can_id == DATA_LOGGER_ACK_CAN_ID)
+    {
+        data_logger_ack_rx_handle(can_id, data);
+        return;
+    }
+    /* ---------- NMS ACK RX ---------- */
+    //! 0x221
+    if (can_id == NMS_ACK_CAN_ID)
+    {
+        nms_ack_rx_handle(can_id, data);
         return;
     }
 }
@@ -325,13 +459,37 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
 
         can_if_process_rx(rx_id, rx_data_radio, can_source);
     } 
-    //! 0x221 - SMOCIP
-    else if (messageBox == canMESSAGE_BOX21) 
+    //! 0x231 - SMOCIP
+    else if (messageBox == canMESSAGE_BOX22)
     {
       canGetData(node, messageBox, rx_data_smocip);
       rx_id = canGetID(node, messageBox);
 
       can_if_process_rx(rx_id, rx_data_smocip, can_source);
+    }
+    //! 0x201 - Counter Card Ack
+    else if (messageBox == canMESSAGE_BOX23)
+    {
+      canGetData(node, messageBox, rx_ack_counter_card);
+      rx_id = canGetID(node, messageBox);
+
+      can_if_process_rx(rx_id, rx_ack_counter_card, can_source);
+    }
+    //! 0x211 - Datalogger Ack
+    else if (messageBox == canMESSAGE_BOX24)
+    {
+      canGetData(node, messageBox, rx_ack_datalogger);
+      rx_id = canGetID(node, messageBox);
+
+      can_if_process_rx(rx_id, rx_ack_datalogger, can_source);
+    }
+    //! 0x221 - NMS Ack
+    else if (messageBox == canMESSAGE_BOX25)
+    {
+      canGetData(node, messageBox, rx_ack_nms);
+      rx_id = canGetID(node, messageBox);
+
+      can_if_process_rx(rx_id, rx_ack_nms, can_source);
     }
 }
 

@@ -7,7 +7,9 @@
 #define SMOCIP_PKT_TYPE    0x01U
 #define SMOCIP_SEQ_TOTAL   0x03U
 
-#define SMOCIP_RX_ID 0x221U
+#define SMOCIP_TX_CAN_ID    0x0230U
+#define SMOCIP_RX_ID        0x0231U
+#define SMOCIP_ACK_CAN_ID   0x0230U
 
 #define ACK_ACTION_SMOCIP SMOCIP_PKT_TYPE
 typedef struct
@@ -40,5 +42,6 @@ void smocip_build_payload(void);
 void smocip_send_can(uint8_t seq_index);
 //! TEST
 void smocip_test_data_init(void);
+void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data);
 
 #endif

@@ -6,6 +6,9 @@
 #include <string.h>
 
 //static uint16_t nms_msg_seq = 0;
+volatile uint8_t nms_ack_received = 0U;
+volatile uint8_t nms_ack_action = 0U;
+volatile uint8_t nms_ack_status = 0U;
 
 nms_tx_ctx_t nms_ctx;
 static void set_bits(uint8_t *buf, uint16_t bit, uint8_t len, uint32_t value)
@@ -1758,3 +1761,33 @@ void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num)
     canTransmit(canREG1,NMS_TX_MB, can_frame);
     canTransmit(canREG2,NMS_TX_MB, can_frame);
 }
+
+
+void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
+{
+    uint16_t ack_can_id;
+    uint8_t action_type;
+    uint8_t ack_status;
+
+    /* Byte 0-1 : ACK_CAN_ID */
+    ack_can_id = ((uint16_t)data[0] << 8) |
+                 (uint16_t)data[1];
+
+    /* Byte 2 : ACTION_TYPE */
+    action_type = data[2];
+
+    /* Byte 3 : ACK_STATUS */
+    ack_status = data[3];
+
+    /* ACK must belong to NMS */
+    if (ack_can_id != NMS_TX_CAN_ID)
+    {
+        return;
+    }
+
+    /* Store / process ACK */
+    nms_ack_received = 1U;
+    nms_ack_action = action_type;
+    nms_ack_status = ack_status;
+}
+
