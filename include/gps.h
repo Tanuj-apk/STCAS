@@ -42,10 +42,15 @@ typedef struct
     uint32_t tAcc_ns;
 
     uint8_t  numSV;
+
+    uint8_t satellites_in_view;
+    uint8_t max_cno;
+
     uint8_t  gps_fix_ok;
     uint8_t  pps_ok;
 
     uint16_t status_flags;       // little-endian
+    uint32_t firmware_checksum;
     uint16_t crc16;              // assembled from CRC16_Modbus + wire LSB
 } GPS_Frame_t;
 #pragma pack()

@@ -5,7 +5,7 @@
 #include "can_if.h"
 
 #define SMOCIP_PKT_TYPE    0x01U
-#define SMOCIP_SEQ_TOTAL   0x03U
+#define SMOCIP_SEQ_TOTAL   0x05U
 
 #define SMOCIP_TX_CAN_ID    0x0230U
 #define SMOCIP_RX_ID        0x0231U
@@ -18,7 +18,12 @@ typedef struct
     uint16_t kms_key_index;
     uint16_t tsr_count;
     uint8_t  status_byte;
-    uint8_t  app_checksum[6];
+
+    uint32_t comm_card1_checksum;
+    uint32_t comm_card2_checksum;
+    uint32_t mvi_card_checksum;
+    uint32_t input_card_checksum;
+    uint32_t riu_checksum;
 } smocip_tx_t;
 
 extern smocip_tx_t smocip_tx;
@@ -43,5 +48,11 @@ void smocip_send_can(uint8_t seq_index);
 //! TEST
 void smocip_test_data_init(void);
 void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data);
+
+extern volatile uint32_t comm_card1_checksum;
+extern volatile uint32_t comm_card2_checksum;
+extern volatile uint32_t mvi_card_checksum;
+extern volatile uint32_t input_card_checksum;
+extern volatile uint32_t riu_checksum;
 
 #endif
