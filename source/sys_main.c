@@ -89,7 +89,7 @@
 extern volatile uint8_t rx_byte;
 int count = 0;
 int frames_of_arp = 0;
-bool some_flag = 0;
+uint32_t calculated_firmware_checksum = 0U;
 uint8_t flagSet;
 uint8_t DataLogCheck = 0;
 uint8_t DataLogCount = 0;
@@ -101,11 +101,14 @@ void v_1sTasks(void);
 void KavachInit(void);
 //void MainStateMachine(void);
 //void MasterStateChange(State_t next, cond_mask_t mask);
-
+uint32_t calculate_firmware_crc(void);
 #define REVERSE_TIMEOUT_SEC   600U   // 10 minutes
 uint8_t reverse_timeout_flag = 0;
 //Test Variables
 //uint8_t BIU_Test = 1;
+
+#define FIRMWARE_CRC_START 0x00000000UL
+#define FIRMWARE_CRC_END 0x0002383FUL
 
 /* ============================================================
  *  MAIN
@@ -116,6 +119,7 @@ int main(void)
 {
 /* USER CODE BEGIN (3) */
     KavachInit();
+    calculated_firmware_checksum = calculate_firmware_crc();
     HCMS_DisplayString(" OK ");
     while (1)
     {
@@ -161,6 +165,40 @@ int main(void)
 
 
 /* USER CODE BEGIN (4) */
+/* For Displaying CPU Checksum
+Polynomial = 0xEDB88320
+Initial    = 0xFFFFFFFF
+Final XOR  = 0xFFFFFFFF
+*/
+uint32_t calculate_firmware_crc(void)
+{
+    uint32_t crc = 0xFFFFFFFFUL;
+    uint32_t address;
+    uint8_t data;
+    uint32_t bit;
+
+    for (address = FIRMWARE_CRC_START; address <= FIRMWARE_CRC_END; address++)
+    {
+        data = *((volatile uint8_t *)address);
+
+        crc ^= (uint32_t)data;
+
+        for (bit = 0U; bit < 8U; bit++)
+        {
+            if (crc & 1U)
+            {
+                crc = (crc >> 1U) ^ 0xEDB88320UL;
+            }
+            else
+            {
+                crc = crc >> 1U;
+            }
+        }
+    }
+
+    return ~crc;
+}
+
 //void MainStateMachine(void)
 //{
 //    // ? Take a clean, consistent snapshot of input_write

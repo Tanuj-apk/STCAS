@@ -1,4 +1,4 @@
-// CPU â€“ TMS570LS1224 â€“ GPS1 & GPS2 frame receive & parse (SCI1 + SCILIN) - Selection logic - Fallback CPU time + no-frame timeout
+// CPU – TMS570LS1224 – GPS1 & GPS2 frame receive & parse (SCI1 + SCILIN) - Selection logic - Fallback CPU time + no-frame timeout
 //- Boot up condition added + Faults + CAN
 #include "sys_common.h"
 #include "system.h"
@@ -10,6 +10,7 @@
 #include "gps.h"
 #include "i2c_UD.h"
 #include "radio.h"
+#include "NMS.h"
 
 /* ============================================================
  *  CONFIG
@@ -35,15 +36,15 @@ volatile uint32_t gps2_last_ok_sec     = 0;
 
 volatile bool incremental_test_failed = 0;
 
-/* No-frame timeout for each GPS (testing value; later 10â€“30 s) */
+/* No-frame timeout for each GPS (testing value; later 10–30 s) */
 #define GPS_FRAME_TIMEOUT_SEC   3u
 
 // Bytes on the wire from GPS-TIVA:
 // A5 5A len card week[2] tow[4] syssec[4]
 // lat[4] lon[4] tAcc[4]
 // numSV fix pps status[2] crc16[2]
-// Total = 33 bytes
-#define GPS_FRAME_TOTAL 33
+// Total = 35 bytes
+#define GPS_FRAME_TOTAL 39
 
 // status_flags bits in GPS frame (from GPS-TIVA)
 #define GPS_STAT_FIX_OK      (1u << 0)  // gps_fix_ok
@@ -54,7 +55,12 @@ volatile bool incremental_test_failed = 0;
 
 #define TIME_MISMATCH_THRESH_SEC   1u
 
-//!================= LATITUDE AND LONGITUDE Implementation ====================
+extern volatile uint32_t gps1_firmware_checksum;
+extern volatile uint32_t gps2_firmware_checksum;
+extern volatile uint8_t gps1_checksum_valid;
+extern volatile uint8_t gps2_checksum_valid;
+
+//!================= LATITUDE AND LONGITUDE Implementation //====================
 uint32_t radio_latitude = 0;
 uint32_t radio_longitude = 0;
 
@@ -290,10 +296,10 @@ static void gps1_parse_complete_frame(uint8_t *buf, uint8_t len)
     if (len < GPS_FRAME_TOTAL)
         return;  // too short, ignore
 
-    uint8_t crc_rx_low = buf[31];
-    uint8_t crc_rx_high = buf[32];
+    uint8_t crc_rx_low = buf[37];
+    uint8_t crc_rx_high = buf[38];
 
-    uint16_t crc_calc = CRC16_Modbus(buf, 31);
+    uint16_t crc_calc = CRC16_Modbus(buf, 37);
 
     uint8_t crc_calc_low = crc_calc & 0xFF;
     uint8_t crc_calc_high = (crc_calc >> 8) & 0xFF;
@@ -326,12 +332,20 @@ static void gps1_parse_complete_frame(uint8_t *buf, uint8_t len)
                          ((uint32_t)buf[24] << 16) | ((uint32_t)buf[25] << 24);
 
     gps1_frame.numSV = buf[26];
-    gps1_frame.gps_fix_ok = buf[27];
-    gps1_frame.pps_ok = buf[28];
+    gps1_frame.satellites_in_view = buf[27];
+    gps1_frame.max_cno = buf[28];
 
-    gps1_frame.status_flags = (uint16_t)buf[29] | ((uint16_t)buf[30] << 8);
+    gps1_frame.gps_fix_ok = buf[29];
+    gps1_frame.pps_ok = buf[30];
+
+    gps1_frame.status_flags = (uint16_t)buf[31] | ((uint16_t)buf[32] << 8);
+
+    gps1_frame.firmware_checksum = (uint32_t)buf[33] | ((uint32_t)buf[34] << 8) | ((uint32_t)buf[35] << 16) | ((uint32_t)buf[36] << 24);
 
     gps1_frame.crc16 = crc_calc;
+
+    gps1_firmware_checksum = gps1_frame.firmware_checksum;
+    gps1_checksum_valid = 1U;
 
     gps1_frame_valid = 1;   // we have at least one good frame
     gps1_new_frame   = 1;   // new data arrived
@@ -421,9 +435,10 @@ static void gps2_parse_complete_frame(uint8_t *buf, uint8_t len)
     if (len < GPS_FRAME_TOTAL)
         return;
 
-    uint8_t crc_rx_low = buf[31];
-    uint8_t crc_rx_high = buf[32];
-    uint16_t crc_calc = CRC16_Modbus(buf, 31);
+    uint8_t crc_rx_low = buf[37];
+    uint8_t crc_rx_high = buf[38];
+
+    uint16_t crc_calc = CRC16_Modbus(buf, 37);
     uint8_t crc_calc_low = crc_calc & 0xFF;
     uint8_t crc_calc_high = (crc_calc >> 8) & 0xFF;
 
@@ -460,12 +475,20 @@ static void gps2_parse_complete_frame(uint8_t *buf, uint8_t len)
                          ((uint32_t)buf[24] << 16) | ((uint32_t)buf[25] << 24);
 
     gps2_frame.numSV = buf[26];
-    gps2_frame.gps_fix_ok = buf[27];
-    gps2_frame.pps_ok = buf[28];
+    gps2_frame.satellites_in_view = buf[27];
+    gps2_frame.max_cno = buf[28];
 
-    gps2_frame.status_flags = (uint16_t)buf[29] | ((uint16_t)buf[30] << 8);
+    gps2_frame.gps_fix_ok = buf[29];
+    gps2_frame.pps_ok = buf[30];
+
+    gps2_frame.status_flags = (uint16_t)buf[31] | ((uint16_t)buf[32] << 8);
+
+    gps2_frame.firmware_checksum = (uint32_t)buf[33] | ((uint32_t)buf[34] << 8) | ((uint32_t)buf[35] << 16) | ((uint32_t)buf[36] << 24);
 
     gps2_frame.crc16 = crc_calc;
+
+    gps2_firmware_checksum = gps2_frame.firmware_checksum;
+    gps2_checksum_valid = 1U;
 
     gps2_frame_valid = 1;
     gps2_new_frame   = 1;
@@ -567,10 +590,10 @@ static inline uint8_t gps_time_mismatch(volatile GPS_Frame_t *gps1,
                                         volatile GPS_Frame_t *gps2)
 {
     if (!gps_fix_bit(gps1) || !gps_fix_bit(gps2))
-        return 0;   // â€œxâ€ in the table
+        return 0;   // “x” in the table
 
     if (!gps_pps_bit(gps1) || !gps_pps_bit(gps2))
-        return 0;   // â€œxâ€ in the table
+        return 0;   // “x” in the table
 
     uint32_t GPSTime1 = gps1->gps_system_seconds;
     uint32_t GPSTime2 = gps2->gps_system_seconds;
@@ -657,20 +680,21 @@ gps_decision_t decide_gps_primary(volatile GPS_Frame_t *gps1,
         {
             if((IncTest2 > LastIncTest2) ? ((IncTest2 - LastIncTest2 > 0)) : (LastIncTest2 - IncTest2 > 0))
             {
+                //Switch to SR mode
                 fallback_active = 1;
                 seconds_in_fallback = 0;
                 incremental_test_failed = 1;
             }
             else
             {
-                //Switch to GPS2?
+                //Switch to GPS2
                 gps_select.sel = GPS_SEL_GPS2;
             }
         }
         else if((IncTest2 > LastIncTest2) ? ((IncTest2 - LastIncTest2 > 0)) : (LastIncTest2 - IncTest2 > 0))
         {
-            //Switch to GPS1?
-            gps_select.sel = GPS_SEL_GPS2;
+            //Switch to GPS1
+            gps_select.sel = GPS_SEL_GPS1;
         }
     }
     //
@@ -821,6 +845,95 @@ uint32_t get_elapsed_ms(void)
 {
     return (get_elapsed_us() / 1000U); 
 }
+
+//static void nms_update_gps_health(void)
+//{
+//  /* Field 18 */
+//  if (current_sel == GPS_SEL_NONE)
+//    nms_ctx.health.active_gps_number = 0;
+//  else if (current_sel == GPS_SEL_GPS1)
+//    nms_ctx.health.active_gps_number = 1;
+//  else if (current_sel == GPS_SEL_GPS2)
+//    nms_ctx.health.active_gps_number = 2;
+//  else
+//    nms_ctx.health.active_gps_number = 3;
+//
+//  /* Field 19 */
+//  if (!gps1_frame_valid)
+//    nms_ctx.health.gps1_view_status = 0;
+//  else if (gps1_frame.gps_fix_ok)
+//    nms_ctx.health.gps1_view_status = 1; /* V */
+//  else
+//    nms_ctx.health.gps1_view_status = 2; /* A */
+//
+//  /* Field 20 */
+//  if (!gps2_frame_valid)
+//    nms_ctx.health.gps2_view_status = 0;
+//  else if (gps2_frame.gps_fix_ok)
+//    nms_ctx.health.gps2_view_status = 1;
+//  else
+//    nms_ctx.health.gps2_view_status = 2;
+//
+//  /* Field 21 */
+//  nms_ctx.health.gps1_seconds = (uint8_t)(gps1_frame.gps_system_seconds % 60U);
+//
+//  /* Field 22 */
+//  nms_ctx.health.gps2_seconds = (uint8_t)(gps2_frame.gps_system_seconds % 60U);
+//
+//  /* Field 23 */
+////   nms_ctx.health.gps1_satellites = gps1_frame.numSV;
+//  nms_ctx.health.gps1_satellites = gps1_frame.satellites_in_view;
+//
+//  /* Field 24 */
+//  nms_ctx.health.gps1_cno_max = gps1_frame.max_cno;
+//
+//  /* Field 25 */
+////   nms_ctx.health.gps2_satellites = gps2_frame.numSV;
+//  nms_ctx.health.gps2_satellites = gps2_frame.satellites_in_view;
+//
+//  /* Field 26 */
+//  nms_ctx.health.gps2_cno_max = gps2_frame.max_cno;
+//
+//  /* Field 27 */
+//  {
+//    uint16_t status = 0;
+//
+//    uint8_t fix = ((gps_faults & GPSF_G1_NO_FIX) == 0U);
+//
+//    uint8_t pps = ((gps_faults & GPSF_G1_NO_PPS) == 0U);
+//
+//    if (!fix && !pps)
+//      status = 0;
+//    else if (!fix && pps)
+//      status = 1;
+//    else if (fix && !pps)
+//      status = 2;
+//    else
+//      status = 3;
+//
+//    nms_ctx.health.gps1_link_status = status;
+//  }
+//
+//  /* Field 28 */
+//  {
+//    uint16_t status = 0;
+//
+//    uint8_t fix = ((gps_faults & GPSF_G2_NO_FIX) == 0U);
+//
+//    uint8_t pps = ((gps_faults & GPSF_G2_NO_PPS) == 0U);
+//
+//    if (!fix && !pps)
+//      status = 0;
+//    else if (!fix && pps)
+//      status = 1;
+//    else if (fix && !pps)
+//      status = 2;
+//    else
+//      status = 3;
+//
+//    nms_ctx.health.gps2_link_status = status;
+//  }
+//}
 
 void gps_process(void)
 {
@@ -1035,6 +1148,8 @@ void gps_process(void)
         current_sel       = gps_select.sel;
         current_nms_fault = gps_select.nms_fault;
         gps_faults        = gps_select.faults;
+
+//        nms_update_gps_health();
 
         const char *selStr =
                 (gps_select.sel == GPS_SEL_GPS1) ? "GPS1" :

@@ -8,7 +8,7 @@
  *  CONFIG
  * ============================================================ */
 #define STARTUP_ACK_TIMEOUT_SEC   5U
-#define DEV_COUNT 9U
+#define DEV_COUNT 8U
 
 /* ============================================================
  *  STARTUP ACK TRACKING
@@ -48,27 +48,26 @@ static const can_device_t can_devices[] =
     { 0, 0x81U, 0x0C1U, "RADIO1",       1U , 0},
     { 1, 0x82U, 0x0C2U, "RADIO2",       1U , 0},
 
-    { 2, 0x83U, 0x0C3U, "RFID1",        1U , 1},
-    { 3, 0x84U, 0x0C4U, "RFID2",        1U , 1},
+    { 2, 0x83U, 0x0C3U, "EI1",          1U , 1},
+    { 3, 0x84U, 0x0C4U, "EI2",          1U , 1},
 
     { 4, 0x85U, 0x0C5U, "DATA LOGGER",  1U , 2},
 
-    { 5, 0x86U, 0x0C6U, "GSM1",         1U , 3},
-    { 6, 0x87U, 0x0C7U, "GSM2",         1U , 3},
+    { 5, 0x86U, 0x0C6U, "NMS",          1U , 3},
+    { 6, 0x87U, 0x0C7U, "KMS",          1U , 3},
 
-    { 7, 0x88U, 0x0C8U, "BIU1",         1U , 4},
-    { 8, 0x89U, 0x0C9U, "BIU2",         1U , 4},
+    { 7, 0x88U, 0x0C8U, "ADJ STCAS1",   1U , 4},
+    { 8, 0x89U, 0x0C9U, "ADJ STCAS2",   1U , 4},
 
     { 9, 0x8AU, 0x0CAU, "INPUT CARD1",  1U , 5},
     {10, 0x8BU, 0x0CBU, "INPUT CARD2",  1U , 5},
 
-    {11, 0x8CU, 0x0CCU, "OUTPUT CARD1", 1U , 6},
-    {12, 0x8DU, 0x0CDU, "OUTPUT CARD2", 1U , 6},
+    {11, 0x8CU, 0x0CCU, "RIU",          1U , 6},
 
-    {13, 0x8EU, 0x0CEU, "COUNTER CARD", 1U , 7},
+    {12, 0x8DU, 0x0CDU, "SMOCIP",       1U , 7},
 
-    {14, 0x8FU, 0x0CFU, "DMI1",         1U , 8},
-    {15, 0x90U, 0x0D0U, "DMI2",         1U , 8},
+    {13, 0x8EU, 0x0CEU, "INPUT CARD3",  1U , 5},
+
 };
 
 uint8_t dev_count[DEV_COUNT];
@@ -80,6 +79,196 @@ uint8_t system_faulty_flag;
 uint8_t  hb_ack_bitmap[NUM_CAN_DEVICES];
 uint8_t  ack_bitmap[NUM_CAN_DEVICES];
 
+volatile uint32_t gps1_firmware_checksum = 0U;
+volatile uint32_t gps2_firmware_checksum = 0U;
+
+volatile uint8_t gps1_checksum_valid = 0U;
+volatile uint8_t gps2_checksum_valid = 0U;
+/* ============================================================
+ *  CARD FIRMWARE CHECKSUMS
+ * ============================================================ */
+uint32_t peripheral_firmware_checksum[NUM_CAN_DEVICES];
+
+volatile uint32_t comm_card1_checksum = 0U;
+volatile uint32_t comm_card2_checksum = 0U;
+volatile uint32_t mvi_card_checksum = 0U;
+volatile uint32_t input_card_checksum = 0U;
+volatile uint32_t riu_checksum = 0U;
+
+/* ============================================================
+ *  CRC32 - IEEE 802.3 To combine checksums
+ * ============================================================ */
+
+static uint32_t CRC32_Calculate(const uint8_t *buf, uint32_t len)
+{
+    uint32_t crc = 0xFFFFFFFFU;
+    uint32_t i;
+    uint8_t j;
+
+    for (i = 0U; i < len; i++)
+    {
+        crc ^= (uint32_t)buf[i];
+
+        for (j = 0U; j < 8U; j++)
+        {
+            if (crc & 1U)
+            {
+                crc = (crc >> 1) ^ 0xEDB88320U;
+            }
+            else
+            {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc ^ 0xFFFFFFFFU;
+}
+
+static void checksum32_to_bytes(uint32_t checksum, uint8_t *buf)
+{
+    buf[0] = (uint8_t)(checksum >> 24);
+    buf[1] = (uint8_t)(checksum >> 16);
+    buf[2] = (uint8_t)(checksum >> 8);
+    buf[3] = (uint8_t)checksum;
+}
+
+static void update_card_checksums(void)
+{
+    uint8_t card1_data[16];
+    uint8_t card2_data[16];
+    uint8_t mvi_data[16];
+    uint8_t input_card_data[12]; //! Depends
+//    uint8_t riu_data[4];
+
+    uint32_t radio1_checksum;
+    uint32_t radio2_checksum;
+    uint32_t ei1_checksum;
+    uint32_t ei2_checksum;
+    uint32_t adjstcas1_checksum;
+    uint32_t adjstcas2_checksum;
+    uint32_t smocip_checksum;
+
+    uint32_t datalogger_checksum;
+    uint32_t nms_checksum;
+    uint32_t kms_checksum;
+
+    uint32_t input_card1_checksum;
+    uint32_t input_card2_checksum;
+    uint32_t input_card3_checksum;
+
+//    uint32_t riu_checksum;
+
+    /* ========================================================
+     * PERIPHERAL CHECKSUMS
+     * ======================================================== */
+
+    radio1_checksum = peripheral_firmware_checksum[0];
+    radio2_checksum = peripheral_firmware_checksum[1];
+
+    ei1_checksum = peripheral_firmware_checksum[2];
+    ei2_checksum = peripheral_firmware_checksum[3];
+
+    datalogger_checksum = peripheral_firmware_checksum[4];
+
+    nms_checksum = peripheral_firmware_checksum[5];
+    kms_checksum = peripheral_firmware_checksum[6];
+
+    adjstcas1_checksum = peripheral_firmware_checksum[7];
+    adjstcas2_checksum = peripheral_firmware_checksum[8];
+
+    input_card1_checksum = peripheral_firmware_checksum[9];
+    input_card2_checksum = peripheral_firmware_checksum[10];
+    input_card3_checksum = peripheral_firmware_checksum[13];
+
+    riu_checksum = peripheral_firmware_checksum[11];
+
+    smocip_checksum = peripheral_firmware_checksum[12];
+
+    /* ========================================================
+     * COMM CARD 1
+     *
+     * RADIO1 -> GPS1 -> EI1 -> ADJ STCAS1
+     * ======================================================== */
+
+    if (ack_bitmap[0] && gps1_checksum_valid && ack_bitmap[2] && ack_bitmap[7])
+    {
+        checksum32_to_bytes(radio1_checksum, card1_data + 0);
+
+        checksum32_to_bytes(gps1_frame.firmware_checksum, card1_data + 4);
+
+        checksum32_to_bytes(ei1_checksum, card1_data + 8);
+
+        checksum32_to_bytes(adjstcas1_checksum, card1_data + 12);
+
+        comm_card1_checksum = CRC32_Calculate(card1_data, 16U);
+    }
+
+    /* ========================================================
+     * COMM CARD 2
+     *
+     * RADIO2 -> GPS2 -> EI2 -> ADJ STCAS2
+     * ======================================================== */
+
+    if (ack_bitmap[1] && gps2_checksum_valid && ack_bitmap[3] && ack_bitmap[8])
+    {
+        checksum32_to_bytes(radio2_checksum, card2_data + 0);
+
+        checksum32_to_bytes(gps2_frame.firmware_checksum, card2_data + 4);
+
+        checksum32_to_bytes(ei2_checksum, card2_data + 8);
+
+        checksum32_to_bytes(adjstcas2_checksum, card2_data + 12);
+
+        comm_card2_checksum = CRC32_Calculate(card2_data, 16U);
+    }
+
+    /* ========================================================
+     * MVI CARD
+     *
+     * DATA LOGGER -> NMS -> KMS -> SMOCIP
+     * ======================================================== */
+
+    if (ack_bitmap[4] && ack_bitmap[5] && ack_bitmap[6] && ack_bitmap[12])
+    {
+        checksum32_to_bytes(datalogger_checksum, mvi_data + 0);
+
+        checksum32_to_bytes(nms_checksum,        mvi_data + 4);
+
+        checksum32_to_bytes(kms_checksum,        mvi_data + 8);
+
+        checksum32_to_bytes(smocip_checksum,     mvi_data + 12);
+
+        mvi_card_checksum = CRC32_Calculate(mvi_data, 16U);
+    }
+
+    /* ========================================================
+     * INPUT CARD
+     * INPUT CARD1 -> INPUT CARD2 -> INPUT CARD3
+     * ======================================================== */
+
+    if (ack_bitmap[9] && ack_bitmap[10] && ack_bitmap[13])
+    {
+        checksum32_to_bytes(input_card1_checksum, input_card_data + 0);
+
+        checksum32_to_bytes(input_card2_checksum, input_card_data + 4);
+
+        checksum32_to_bytes(input_card3_checksum, input_card_data + 8);
+
+        input_card_checksum = CRC32_Calculate(input_card_data, 12U);
+    }
+
+    /* ========================================================
+     * RIU
+     * Only one RIU is currently present
+     * ======================================================== */
+
+    if (ack_bitmap[11])
+    {
+        riu_checksum = peripheral_firmware_checksum[11];
+    }
+}
+
 /* ============================================================
  *  INIT
  * ============================================================ */
@@ -90,6 +279,7 @@ void can_manager_init(void)
     {
         ack_bitmap[i] = 0U;
         hb_ack_bitmap[i] = 0U;
+        peripheral_firmware_checksum[i] = 0U;
     }
     send_cpu_startup_can();
     startup_start_time   = seconds_uptime;
@@ -113,6 +303,17 @@ void can_manager_handle_ack(uint32_t can_id, uint8_t *data)
         {
             ack_bitmap[can_devices[i].index] = 1U;
             dev_count[can_devices[i].dev_index]++;
+
+            /* Extract peripheral firmware checksum
+             *
+             * Byte 0 = Startup ACK message type
+             * Byte 1 = CRC [31:24]
+             * Byte 2 = CRC [23:16]
+             * Byte 3 = CRC [15:8]
+             * Byte 4 = CRC [7:0]
+             */
+            peripheral_firmware_checksum[can_devices[i].index] = ((uint32_t)data[1] << 24) | ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 8) | (uint32_t)data[4];
+
             break;
         }
     }
@@ -195,6 +396,8 @@ int can_manager_poll_startup(void)
                     }
                 }
             }
+            /* Calculate combined Card checksums */
+            update_card_checksums();
             for (i = 0; i < DEV_COUNT; i++)
             {
                 if(i == 3)

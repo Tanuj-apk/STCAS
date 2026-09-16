@@ -6,7 +6,7 @@ smocip_tx_t smocip_tx;
 smocip_rx_t smocip_rx;
 
 /* 18-byte payload */
-static uint8_t smocip_payload[18];
+static uint8_t smocip_payload[31];
 
 typedef struct {
   uint8_t data[8];
@@ -21,7 +21,8 @@ volatile uint8_t smocip_ack_action = 0U;
 volatile uint8_t smocip_ack_status = 0U;
 
 //! ============ TEST DATA ==================
-void smocip_test_data_init(void) {
+void smocip_test_data_init(void)
+{
   /* Station ID = "12345" */
   smocip_tx.station_id[0] = '1';
   smocip_tx.station_id[1] = '2';
@@ -53,41 +54,60 @@ void smocip_test_data_init(void) {
   smocip_tx.status_byte = 0x0BU;
 
   /* Application checksum = AA BB CC DD EE FF */
-  smocip_tx.app_checksum[0] = 0xAAU;
-  smocip_tx.app_checksum[1] = 0xBBU;
-  smocip_tx.app_checksum[2] = 0xCCU;
-  smocip_tx.app_checksum[3] = 0xDDU;
-  smocip_tx.app_checksum[4] = 0xEEU;
-  smocip_tx.app_checksum[5] = 0xFFU;
+  smocip_tx.comm_card1_checksum = comm_card1_checksum;
+  smocip_tx.comm_card2_checksum = comm_card2_checksum;
+  smocip_tx.mvi_card_checksum    = mvi_card_checksum;
+  smocip_tx.input_card_checksum  = input_card_checksum;
+  smocip_tx.riu_checksum         = riu_checksum;
 }
 //! =================================================
 
-void smocip_build_payload(void) 
+void smocip_build_payload(void)
 {
-  smocip_payload[0] = smocip_tx.station_id[0];
-  smocip_payload[1] = smocip_tx.station_id[1];
-  smocip_payload[2] = smocip_tx.station_id[2];
-  smocip_payload[3] = smocip_tx.station_id[3];
-  smocip_payload[4] = smocip_tx.station_id[4];
+    smocip_payload[0] = smocip_tx.station_id[0];
+    smocip_payload[1] = smocip_tx.station_id[1];
+    smocip_payload[2] = smocip_tx.station_id[2];
+    smocip_payload[3] = smocip_tx.station_id[3];
+    smocip_payload[4] = smocip_tx.station_id[4];
 
-  smocip_payload[5] = (uint8_t)(smocip_tx.kms_key_index >> 8);
+    smocip_payload[5] = (uint8_t)(smocip_tx.kms_key_index >> 8);
+    smocip_payload[6] = (uint8_t)(smocip_tx.kms_key_index);
 
-  smocip_payload[6] = (uint8_t)(smocip_tx.kms_key_index);
+    smocip_payload[7] = (uint8_t)(smocip_tx.tsr_count >> 8);
+    smocip_payload[8] = (uint8_t)(smocip_tx.tsr_count);
 
-  smocip_payload[7] = (uint8_t)(smocip_tx.tsr_count >> 8);
-  smocip_payload[8] = (uint8_t)(smocip_tx.tsr_count);
+    smocip_payload[9] = 0x00U;   /* Reserved */
+    smocip_payload[10] = smocip_tx.status_byte;
 
-  smocip_payload[9] = 0x00; /* Reserved */
-  smocip_payload[10] = smocip_tx.status_byte;
+    /* COMM CARD 1 CHECKSUM */
+    smocip_payload[11] = (uint8_t)(smocip_tx.comm_card1_checksum >> 24);
+    smocip_payload[12] = (uint8_t)(smocip_tx.comm_card1_checksum >> 16);
+    smocip_payload[13] = (uint8_t)(smocip_tx.comm_card1_checksum >> 8);
+    smocip_payload[14] = (uint8_t)(smocip_tx.comm_card1_checksum);
 
-  smocip_payload[11] = smocip_tx.app_checksum[0];
-  smocip_payload[12] = smocip_tx.app_checksum[1];
-  smocip_payload[13] = smocip_tx.app_checksum[2];
-  smocip_payload[14] = smocip_tx.app_checksum[3];
-  smocip_payload[15] = smocip_tx.app_checksum[4];
-  smocip_payload[16] = smocip_tx.app_checksum[5];
+    /* COMM CARD 2 CHECKSUM */
+    smocip_payload[15] = (uint8_t)(smocip_tx.comm_card2_checksum >> 24);
+    smocip_payload[16] = (uint8_t)(smocip_tx.comm_card2_checksum >> 16);
+    smocip_payload[17] = (uint8_t)(smocip_tx.comm_card2_checksum >> 8);
+    smocip_payload[18] = (uint8_t)(smocip_tx.comm_card2_checksum);
 
-  smocip_payload[17] = 0x00; /* Future */
+    /* MVI CARD CHECKSUM */
+    smocip_payload[19] = (uint8_t)(smocip_tx.mvi_card_checksum >> 24);
+    smocip_payload[20] = (uint8_t)(smocip_tx.mvi_card_checksum >> 16);
+    smocip_payload[21] = (uint8_t)(smocip_tx.mvi_card_checksum >> 8);
+    smocip_payload[22] = (uint8_t)(smocip_tx.mvi_card_checksum);
+
+    /* INPUT CARD CHECKSUM */
+    smocip_payload[23] = (uint8_t)(smocip_tx.input_card_checksum >> 24);
+    smocip_payload[24] = (uint8_t)(smocip_tx.input_card_checksum >> 16);
+    smocip_payload[25] = (uint8_t)(smocip_tx.input_card_checksum >> 8);
+    smocip_payload[26] = (uint8_t)(smocip_tx.input_card_checksum);
+
+    /* RIU CHECKSUM */
+    smocip_payload[27] = (uint8_t)(smocip_tx.riu_checksum >> 24);
+    smocip_payload[28] = (uint8_t)(smocip_tx.riu_checksum >> 16);
+    smocip_payload[29] = (uint8_t)(smocip_tx.riu_checksum >> 8);
+    smocip_payload[30] = (uint8_t)(smocip_tx.riu_checksum);
 }
 
 void smocip_send_can(uint8_t seq_index) 
