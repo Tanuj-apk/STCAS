@@ -57,7 +57,7 @@
 
 #include "can.h"
 #include "can_if.h"
-#include "counter_card.h"
+//#include "counter_card.h"
 //#include "dmi_can.h"
 #include "gps.h"
 #include "gsm_rx.h"
@@ -123,14 +123,14 @@ int main(void)
     HCMS_DisplayString(" OK ");
     while (1)
     {
-        //        if(!can_manager_poll_startup())
-        //            continue;
+                if(!can_manager_poll_startup())
+                    continue;
 
         gps_process();
 
         if (rti_1ms_tick_flag) 
         {
-            v_1msTasks();
+//            v_1msTasks();
             rti_1ms_tick_flag = 0;
         }
 
@@ -148,7 +148,7 @@ int main(void)
 
         if (rti_100ms_tick_flag)
         {
-            v_100msTasks();
+//            v_100msTasks();
             rti_100ms_tick_flag = 0;
         }
 
@@ -288,13 +288,6 @@ void KavachInit(void)
 
     start_rtc_write = 1;
 
-    //! For testing SMOCIP Tx
-    smocip_build_payload();
-
-    smocip_send_can(0);
-    smocip_send_can(1);
-    smocip_send_can(2);
-
     //BIU Check
 //    BIU_Init();
 }
@@ -306,21 +299,25 @@ void v_1msTasks(void)
 
 void v_5msTasks(void)
 {
+    radio_ack_process();
+    radio_tx_process();
+    smocip_ack_process();
+    smocip_tx_process();
     //    output_card_set_bit(OUT_EMERGENCY_BRAKE_1);
     //    output_card_set_bit(OUT_EMERGENCY_BRAKE_2);
     //    output_card_set_bit(OUT_HORN);
     //    output_card_send();
-    if(radio_can_arp_transmit_flag)
-    {
-        radio_build_fragment(tx_buf, RADIO_PKT_TYPE_ARP, radio_ctx.seq_total, frames_of_arp);
-        canTransmit(canREG1, tx_mb, tx_buf);
-        canTransmit(canREG2, tx_mb, tx_buf);
-        frames_of_arp += 1;
-        if(frames_of_arp >= 5)
-        {
-            radio_can_arp_transmit_flag = 0;
-        }
-    }
+//    if(radio_can_arp_transmit_flag)
+//    {
+//        radio_build_fragment(tx_buf, RADIO_PKT_TYPE_ARP, radio_ctx.seq_total, frames_of_arp);
+//        canTransmit(canREG1, tx_mb, tx_buf);
+//        canTransmit(canREG2, tx_mb, tx_buf);
+//        frames_of_arp += 1;
+//        if(frames_of_arp >= 5)
+//        {
+//            radio_can_arp_transmit_flag = 0;
+//        }
+//    }
 }
 
 void v_10msTasks(void)
@@ -433,31 +430,25 @@ void v_1sTasks(void)
     //! ========For testing CPU ACK=========
     uint16_t a = 0x160U;
     send_cpu_universal_ack(a, 0, CPU_ACK_OK);
+
+    //! ======== For testing SMOCIP Tx =========
+    static uint8_t smocip_test_count = 0U;
+
+    smocip_test_count++;
+
+    if (smocip_test_count >= 5U)
+    {
+        smocip_test_count = 0U;
+
+        smocip_test_data_init();
+
+        smocip_send();
+    }
+    //! ========================================
+
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
     count++;
-    //! ========For testing SMOCIP Tx=========
-    smocip_test_data_init();
-    static uint8_t smocip_frame = 0;
-    static uint8_t smocip_delay = 0;
-
-    if (smocip_delay > 0) {
-      smocip_delay--;
-    } else {
-      if (smocip_frame == 0) {
-        smocip_build_payload();
-      }
-
-      smocip_send_can(smocip_frame);
-
-      smocip_frame++;
-
-      if (smocip_frame >= 3) {
-        smocip_frame = 0;
-      }
-
-      smocip_delay = 1;
-    }
     //! ======================================
     //    check_for_transmit_arp();
     /* Only for testing
@@ -560,7 +551,7 @@ void v_1sTasks(void)
     //    counter_card_set_bit(COUNTER_BRAKE);
     //    counter_card_send();
 
-    send_Counter_Change_req(flagSet);
+//    send_Counter_Change_req(flagSet);
     flagSet++;
     if(flagSet >= 32)
     {

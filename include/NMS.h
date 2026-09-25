@@ -25,6 +25,28 @@
 #define NMS_MAX_FRAGMENTS       64U
 #define NMS_MAX_PAYLOAD_LEN     128U
 
+
+#define NMS_TRANSACTION_QUEUE_SIZE    8U
+#define NMS_ACK_TIMEOUT_MS            100U
+#define NMS_ACK_MAX_RETRIES           3U
+
+typedef struct
+{
+  uint8_t  pkt_type;
+  uint16_t payload_len;
+  uint8_t  payload[NMS_MAX_PAYLOAD_LEN];
+  uint8_t  seq_total;
+  uint8_t  seq_index;
+  uint8_t  retry_count;
+  uint8_t  active;
+  uint32_t start_time;
+} nms_ack_transaction_t;
+
+void nms_ack_transaction_start(uint8_t pkt_type, const uint8_t *payload, uint16_t payload_len);
+void nms_ack_process(void);
+void nms_tx_process(void);
+void nms_ack_received(uint8_t action_type, uint8_t ack_status);
+
 void nms_send_health(void);
 //typedef struct
 //{

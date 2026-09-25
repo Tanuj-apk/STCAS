@@ -52,10 +52,6 @@ typedef enum
 
 
 /* ============================================================
- * COUNTER CARD ACK
- * ============================================================ */
-#define COUNTER_CARD_ACK_CAN_ID 0x201U
-/* ============================================================
  *  DATALOGGER ACK
  * ============================================================ */
 #define DATA_LOGGER_TX_CAN_ID 0x0210U
@@ -140,7 +136,6 @@ void send_cpu_startup_can(void);
 void send_cpu_time_can(void);
 void send_cpu_heartbeat_can(void);
 void send_gsm_start_req(uint8_t gsm_id, uint8_t action);
-void send_Counter_Change_req(uint8_t flagSet);
 void send_Data_Log(uint8_t count);
 
 /* RX dispatch */

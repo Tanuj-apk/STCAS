@@ -16,6 +16,20 @@ uint32_t g_my_stn_id = 0x12345; // hardcoded for testing
 uint16_t approaching_station_id = 0; //Updated in rfid.c
 //!==========================================================================
 
+/* ============================================================
+ * RADIO TRANSACTION QUEUES
+ * ============================================================ */
+static radio_ack_transaction_t radio1_transaction_queue[RADIO_TRANSACTION_QUEUE_SIZE];
+static radio_ack_transaction_t radio2_transaction_queue[RADIO_TRANSACTION_QUEUE_SIZE];
+
+static uint8_t radio1_queue_head  = 0U;
+static uint8_t radio1_queue_tail  = 0U;
+static uint8_t radio1_queue_count = 0U;
+
+static uint8_t radio2_queue_head  = 0U;
+static uint8_t radio2_queue_tail  = 0U;
+static uint8_t radio2_queue_count = 0U;
+
 #define KAVACH_VERSION_3_2   1
 #define KAVACH_VERSION_4_0   2
 
@@ -364,193 +378,193 @@ void radio_update_frame_number(void)
     frame_num = (seconds_of_day & (~1U)) + 1U;
 }
 
-static uint8_t radio_build_arp_payload(uint8_t *payload)
-{
-    uint16_t bit_index = 0;
-    memset(payload, 0, RADIO_MAX_PAYLOAD_LEN);
-
-    /* =========================================================
-     * FRAME 0  ? payload[0–5]
-     * ========================================================= */
-    uint32_t source_loco_id = 0;
-
-    /* PKT_TYPE : 4 bits */
-    set_bits(payload, bit_index, 4, RADIO_PKT_TYPE_ARP);
-    bit_index += 4;
-
-    /* PKT_LEN : 7 bits (filled later) */
-    uint16_t pkt_len_bit_pos = bit_index;
-    set_bits(payload, bit_index, 7, 0);
-    bit_index += 7;
-
-    /* FRAME_NUM : 17 bits */
-    set_bits(payload, bit_index, 17, frame_num);
-    bit_index += 17;
-
-    /* SOURCE_LOCO_ID : 20 bits */
-    set_bits(payload, bit_index, 20, source_loco_id);
-    bit_index += 20;
-
-    /* =========================================================
-     * FRAME 1
-     * ========================================================= */
-
-    uint8_t source_loco_version = 2;
-    uint32_t abs_loc = radio_get_latest_abs_loc();
-    // uint16_t train_length = 0; // TODO: Trail length measurement implementation
-    uint16_t train_length = (uint16_t)calculated_train_length;
-    uint16_t train_speed = 0;
-    uint8_t movement_dir = 0;
-
-    if (trainDir == 0)
-    {
-        movement_dir = 1; // nominal
-    }
-    else if (trainDir == 1)
-    {
-        movement_dir = 2; // reverse
-    }
-    else
-    {
-        movement_dir = 0; // unknown
-    }
-
-    /* SOURCE_LOCO_VERSION : 3 bits */
-    set_bits(payload, bit_index, 3, source_loco_version);
-    bit_index += 3;
-
-    /* ABS_LOCO_LOC : 23 bits */
-    set_bits(payload, bit_index, 23, abs_loc);
-    bit_index += 23;
-
-    /* TRAIN_LENGTH : 11 bits */
-    set_bits(payload, bit_index, 11, train_length);
-    bit_index += 11;
-
-    /* TRAIN_SPEED : 9 bits */
-    set_bits(payload, bit_index, 9, train_speed);
-    bit_index += 9;
-
-    /* MOVEMENT_DIR : 2 bits */
-    set_bits(payload, bit_index, 2, movement_dir);
-    bit_index += 2;
-
-    /* =========================================================
-     * FRAME 2  ? payload[12–17]
-     * ========================================================= */
-    uint8_t loco_mode = 0;
-    uint8_t emg_status = 0; //TODO: Add emergency state
-    uint8_t dbnum;
-
-    if(rfid_db_count != 0)
-        dbnum = (rfid_db_head + RFID_DB_SIZE - 1) % RFID_DB_SIZE;
-    else
-        dbnum = 0;
-
-    odo_distance_radio_rfid_ref = rfid_db[dbnum].odo_distance_rfid_ref;
-
-    uint16_t tag_uid = 0;
-    uint16_t tin = 10;
-
-    if(rfid_db[dbnum].tag_type == 1)
-    {
-        tag_uid = rfid_db[dbnum].data.normal.tag_uid;
-        if(trainDir == 0)
-        {
-            tin = rfid_db[dbnum].data.normal.tin_nominal;
-        }
-        else if(trainDir == 1)
-        {
-            tin = rfid_db[dbnum].data.normal.tin_reverse;
-        }
-    }
-    else if(rfid_db[dbnum].tag_type == 2)
-    {
-        tag_uid = rfid_db[dbnum].data.lc.tag_set_id;
-        if(trainDir == 0)
-        {
-            tin = rfid_db[dbnum].data.lc.tin_nominal;
-        }
-        else if(trainDir == 1)
-        {
-            tin = rfid_db[dbnum].data.lc.tin_reverse;
-        }
-    }
-    else if(rfid_db[dbnum].tag_type == 3)
-    {
-        tag_uid = rfid_db[dbnum].data.adj.tag_set_id;
-        if(trainDir == 0)
-        {
-            tin = rfid_db[dbnum].data.adj.tin_nominal;
-        }
-        else if(trainDir == 1)
-        {
-            tin = rfid_db[dbnum].data.adj.tin_reverse;
-        }
-    }
-    else if(rfid_db[dbnum].tag_type == 4)
-    {
-        tag_uid = rfid_db[dbnum].data.junction.tag_set_id;
-        if (abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_1) < abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_2))
-        {
-            tin = rfid_db[dbnum].data.junction.tin_1;
-        }
-        else
-        {
-            tin = rfid_db[dbnum].data.junction.tin_2;
-        }
-    }
-
-    /* Byte2
-     * EMG_STATUS : 3 bits
-     */
-    set_bits(payload, bit_index, 3, emg_status);
-    bit_index += 3;
-
-    /* LOCO_MODE : 4 bits */
-    set_bits(payload, bit_index, 4, loco_mode);
-    bit_index += 4;
-
-    /* APPROACHING_STATION_ID : 16 bits */
-    set_bits(payload, bit_index, 16, approaching_station_id);
-    bit_index += 16;
-
-    /* LAST_RFID_TAG : 10 bits */
-    set_bits(payload, bit_index, 10, tag_uid);
-    bit_index += 10;
-
-    /* TIN : 9 bits */
-    set_bits(payload, bit_index, 9, tin);
-    bit_index += 9;
-
-    /* LONGITUDE : 21 bits */
-    set_bits(payload, bit_index, 21, radio_longitude);
-    bit_index += 21;
-
-    /* =========================================================
-     * FRAME 3
-     * ========================================================= */
-
-    uint16_t loco_random_number = 354; // TODO
-
-    /* LATITUDE : 20 bits */
-    set_bits(payload, bit_index, 20, radio_latitude);
-    bit_index += 20;
-
-    /* LOCO_RND_NUM_RL : 16 bits */
-    set_bits(payload, bit_index, 16, loco_random_number);
-    bit_index += 16;
-
-    /* =========================================================
-     * INSERT PKT_LEN
-     * ========================================================= */
-
-    uint16_t payload_len = (bit_index + 7) / 8;
-
-    /* Insert PKT_LEN back into header */
-    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
-    return payload_len;
-}
+//static uint8_t radio_build_arp_payload(uint8_t *payload)
+//{
+//    uint16_t bit_index = 0;
+//    memset(payload, 0, RADIO_MAX_PAYLOAD_LEN);
+//
+//    /* =========================================================
+//     * FRAME 0  ? payload[0–5]
+//     * ========================================================= */
+//    uint32_t source_loco_id = 0;
+//
+//    /* PKT_TYPE : 4 bits */
+//    set_bits(payload, bit_index, 4, RADIO_PKT_TYPE_ARP);
+//    bit_index += 4;
+//
+//    /* PKT_LEN : 7 bits (filled later) */
+//    uint16_t pkt_len_bit_pos = bit_index;
+//    set_bits(payload, bit_index, 7, 0);
+//    bit_index += 7;
+//
+//    /* FRAME_NUM : 17 bits */
+//    set_bits(payload, bit_index, 17, frame_num);
+//    bit_index += 17;
+//
+//    /* SOURCE_LOCO_ID : 20 bits */
+//    set_bits(payload, bit_index, 20, source_loco_id);
+//    bit_index += 20;
+//
+//    /* =========================================================
+//     * FRAME 1
+//     * ========================================================= */
+//
+//    uint8_t source_loco_version = 2;
+//    uint32_t abs_loc = radio_get_latest_abs_loc();
+//    // uint16_t train_length = 0; // TODO: Trail length measurement implementation
+//    uint16_t train_length = (uint16_t)calculated_train_length;
+//    uint16_t train_speed = 0;
+//    uint8_t movement_dir = 0;
+//
+//    if (trainDir == 0)
+//    {
+//        movement_dir = 1; // nominal
+//    }
+//    else if (trainDir == 1)
+//    {
+//        movement_dir = 2; // reverse
+//    }
+//    else
+//    {
+//        movement_dir = 0; // unknown
+//    }
+//
+//    /* SOURCE_LOCO_VERSION : 3 bits */
+//    set_bits(payload, bit_index, 3, source_loco_version);
+//    bit_index += 3;
+//
+//    /* ABS_LOCO_LOC : 23 bits */
+//    set_bits(payload, bit_index, 23, abs_loc);
+//    bit_index += 23;
+//
+//    /* TRAIN_LENGTH : 11 bits */
+//    set_bits(payload, bit_index, 11, train_length);
+//    bit_index += 11;
+//
+//    /* TRAIN_SPEED : 9 bits */
+//    set_bits(payload, bit_index, 9, train_speed);
+//    bit_index += 9;
+//
+//    /* MOVEMENT_DIR : 2 bits */
+//    set_bits(payload, bit_index, 2, movement_dir);
+//    bit_index += 2;
+//
+//    /* =========================================================
+//     * FRAME 2  ? payload[12–17]
+//     * ========================================================= */
+//    uint8_t loco_mode = 0;
+//    uint8_t emg_status = 0; //TODO: Add emergency state
+//    uint8_t dbnum;
+//
+//    if(rfid_db_count != 0)
+//        dbnum = (rfid_db_head + RFID_DB_SIZE - 1) % RFID_DB_SIZE;
+//    else
+//        dbnum = 0;
+//
+//    odo_distance_radio_rfid_ref = rfid_db[dbnum].odo_distance_rfid_ref;
+//
+//    uint16_t tag_uid = 0;
+//    uint16_t tin = 10;
+//
+//    if(rfid_db[dbnum].tag_type == 1)
+//    {
+//        tag_uid = rfid_db[dbnum].data.normal.tag_uid;
+//        if(trainDir == 0)
+//        {
+//            tin = rfid_db[dbnum].data.normal.tin_nominal;
+//        }
+//        else if(trainDir == 1)
+//        {
+//            tin = rfid_db[dbnum].data.normal.tin_reverse;
+//        }
+//    }
+//    else if(rfid_db[dbnum].tag_type == 2)
+//    {
+//        tag_uid = rfid_db[dbnum].data.lc.tag_set_id;
+//        if(trainDir == 0)
+//        {
+//            tin = rfid_db[dbnum].data.lc.tin_nominal;
+//        }
+//        else if(trainDir == 1)
+//        {
+//            tin = rfid_db[dbnum].data.lc.tin_reverse;
+//        }
+//    }
+//    else if(rfid_db[dbnum].tag_type == 3)
+//    {
+//        tag_uid = rfid_db[dbnum].data.adj.tag_set_id;
+//        if(trainDir == 0)
+//        {
+//            tin = rfid_db[dbnum].data.adj.tin_nominal;
+//        }
+//        else if(trainDir == 1)
+//        {
+//            tin = rfid_db[dbnum].data.adj.tin_reverse;
+//        }
+//    }
+//    else if(rfid_db[dbnum].tag_type == 4)
+//    {
+//        tag_uid = rfid_db[dbnum].data.junction.tag_set_id;
+//        if (abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_1) < abs(prev_abs_loc_m - rfid_db[dbnum].data.junction.abs_loc_2))
+//        {
+//            tin = rfid_db[dbnum].data.junction.tin_1;
+//        }
+//        else
+//        {
+//            tin = rfid_db[dbnum].data.junction.tin_2;
+//        }
+//    }
+//
+//    /* Byte2
+//     * EMG_STATUS : 3 bits
+//     */
+//    set_bits(payload, bit_index, 3, emg_status);
+//    bit_index += 3;
+//
+//    /* LOCO_MODE : 4 bits */
+//    set_bits(payload, bit_index, 4, loco_mode);
+//    bit_index += 4;
+//
+//    /* APPROACHING_STATION_ID : 16 bits */
+//    set_bits(payload, bit_index, 16, approaching_station_id);
+//    bit_index += 16;
+//
+//    /* LAST_RFID_TAG : 10 bits */
+//    set_bits(payload, bit_index, 10, tag_uid);
+//    bit_index += 10;
+//
+//    /* TIN : 9 bits */
+//    set_bits(payload, bit_index, 9, tin);
+//    bit_index += 9;
+//
+//    /* LONGITUDE : 21 bits */
+//    set_bits(payload, bit_index, 21, radio_longitude);
+//    bit_index += 21;
+//
+//    /* =========================================================
+//     * FRAME 3
+//     * ========================================================= */
+//
+//    uint16_t loco_random_number = 354; // TODO
+//
+//    /* LATITUDE : 20 bits */
+//    set_bits(payload, bit_index, 20, radio_latitude);
+//    bit_index += 20;
+//
+//    /* LOCO_RND_NUM_RL : 16 bits */
+//    set_bits(payload, bit_index, 16, loco_random_number);
+//    bit_index += 16;
+//
+//    /* =========================================================
+//     * INSERT PKT_LEN
+//     * ========================================================= */
+//
+//    uint16_t payload_len = (bit_index + 7) / 8;
+//
+//    /* Insert PKT_LEN back into header */
+//    set_bits(payload, pkt_len_bit_pos, 7, payload_len);
+//    return payload_len;
+//}
 
 radio_arp_t arp = {0};
 static uint8_t radio_parse_arp(const uint8_t *p, uint16_t len)
@@ -645,19 +659,532 @@ void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_tota
     }
 }
 
+
+//!==========================================================================
+//! RETRY TX LOGIC
+//!==========================================================================
+static void radio_build_fragment_from_transaction(uint8_t *can_frame, const radio_ack_transaction_t *transaction, uint8_t seq_index)
+{
+    can_frame[0] = ((transaction->seq_total & 0x0FU) << 4) | (transaction->pkt_type & 0x0FU);
+
+    can_frame[1] = ((seq_index & 0x3FU) << 2) | ((transaction->seq_total >> 4) & 0x03U);
+
+    uint16_t payload_offset = seq_index * RADIO_PAYLOAD_BYTES;
+
+    for (uint8_t i = 0U; i < RADIO_PAYLOAD_BYTES; i++)
+    {
+        if ((payload_offset + i) < transaction->payload_len)
+        {
+            can_frame[2U + i] = transaction->payload[payload_offset + i];
+        }
+        else
+        {
+            can_frame[2U + i] = 0U;
+        }
+    }
+}
+
+radio_ack_transaction_t *radio_get_transaction(radio_id_t radio_id)
+{
+    if (radio_id == RADIO_ID_1)
+    {
+        if (radio1_queue_count == 0U)
+        {
+            return NULL;
+        }
+
+        return &radio1_transaction_queue[radio1_queue_head];
+    }
+
+    if (radio_id == RADIO_ID_2)
+    {
+        if (radio2_queue_count == 0U)
+        {
+            return NULL;
+        }
+
+        return &radio2_transaction_queue[radio2_queue_head];
+    }
+
+    return NULL;
+}
+
+/* ============================================================
+ * RADIO QUEUE HELPERS
+ * ============================================================ */
+
+static uint8_t radio_queue_is_full(radio_id_t radio_id)
+{
+    if (radio_id == RADIO_ID_1)
+    {
+        return (radio1_queue_count >= RADIO_TRANSACTION_QUEUE_SIZE);
+    }
+
+    if (radio_id == RADIO_ID_2)
+    {
+        return (radio2_queue_count >= RADIO_TRANSACTION_QUEUE_SIZE);
+    }
+
+    return 1U;
+}
+
+static uint8_t radio_ack_transaction_start(radio_id_t radio_id, uint8_t pkt_type)
+{
+    radio_ack_transaction_t *transaction;
+    /*
+     * --------------------------------------------------------
+     * Check queue availability
+     * --------------------------------------------------------
+     */
+    if (radio_queue_is_full(radio_id))
+    {
+        /*
+         * Queue full.
+         *
+          TODO:
+         * Set Radio TX queue overflow fault.
+         */
+        return 0U;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Validate complete packet
+     * --------------------------------------------------------
+     */
+    if (radio_ctx.payload_len == 0U)
+    {
+        return 0U;
+    }
+
+    if ((radio_ctx.seq_total == 0U) || (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS))
+    {
+        return 0U;
+    }
+    /*
+     * --------------------------------------------------------
+     * Select free queue slot
+     * --------------------------------------------------------
+     */
+    if (radio_id == RADIO_ID_1)
+    {
+        transaction = &radio1_transaction_queue[radio1_queue_tail];
+    }
+    else if (radio_id == RADIO_ID_2)
+    {
+        transaction = &radio2_transaction_queue[radio2_queue_tail];
+    }
+    else
+    {
+        return 0U;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Save complete transaction
+     * --------------------------------------------------------
+     */
+    transaction->radio_id = radio_id;
+    transaction->pkt_type = pkt_type;
+    transaction->payload_len = radio_ctx.payload_len;
+
+    memcpy(transaction->payload, radio_ctx.payload, radio_ctx.payload_len);
+
+    transaction->seq_total = radio_ctx.seq_total;
+
+    /*
+     * New transaction starts from fragment 0.
+     */
+    transaction->seq_index = 0U;
+
+    transaction->retry_count = 0U;
+
+    /*
+     * It becomes active only when it reaches
+     * the head of the queue.
+     */
+    transaction->active = 0U;
+
+    /*
+     * ACK timer is not running yet.
+     */
+    transaction->start_time = 0U;
+
+    /*
+     * --------------------------------------------------------
+     * Advance queue tail
+     * --------------------------------------------------------
+     */
+    if (radio_id == RADIO_ID_1)
+    {
+        radio1_queue_tail++;
+
+        if (radio1_queue_tail >= RADIO_TRANSACTION_QUEUE_SIZE)
+        {
+            radio1_queue_tail = 0U;
+        }
+
+        radio1_queue_count++;
+
+        /*
+         * If this is the first transaction,
+         * it becomes active.
+         */
+        if (radio1_queue_count == 1U)
+        {
+            transaction->active = 1U;
+        }
+    }
+    else
+    {
+        radio2_queue_tail++;
+
+        if (radio2_queue_tail >= RADIO_TRANSACTION_QUEUE_SIZE)
+        {
+            radio2_queue_tail = 0U;
+        }
+
+        radio2_queue_count++;
+
+        /*
+         * If this is the first transaction,
+         * it becomes active.
+         */
+        if (radio2_queue_count == 1U)
+        {
+            transaction->active = 1U;
+        }
+    }
+
+    return 1U;
+}
+
+static void radio_start_next_transaction(radio_id_t radio_id)
+{
+    radio_ack_transaction_t *transaction;
+
+    transaction = radio_get_transaction(radio_id);
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    /*
+     * Start the transaction.
+     */
+    transaction->active = 1U;
+
+    transaction->retry_count = 0U;
+
+    transaction->seq_index = 0U;
+
+    /*
+     * ACK timer is started only after
+     * the complete packet has been transmitted.
+     */
+    transaction->start_time = 0U;
+}
+
+static void radio_pop_transaction(radio_id_t radio_id)
+{
+    if (radio_id == RADIO_ID_1)
+    {
+        if (radio1_queue_count == 0U)
+        {
+            return;
+        }
+
+        radio1_transaction_queue[radio1_queue_head].active = 0U;
+
+        radio1_queue_head++;
+
+        if (radio1_queue_head >= RADIO_TRANSACTION_QUEUE_SIZE)
+        {
+            radio1_queue_head = 0U;
+        }
+
+        radio1_queue_count--;
+
+        /*
+         * Start next transaction, if available.
+         */
+        if (radio1_queue_count > 0U)
+        {
+            radio_start_next_transaction(RADIO_ID_1);
+        }
+    }
+    else if (radio_id == RADIO_ID_2)
+    {
+        if (radio2_queue_count == 0U)
+        {
+            return;
+        }
+
+        radio2_transaction_queue[radio2_queue_head].active = 0U;
+
+        radio2_queue_head++;
+
+        if (radio2_queue_head >= RADIO_TRANSACTION_QUEUE_SIZE)
+        {
+            radio2_queue_head = 0U;
+        }
+
+        radio2_queue_count--;
+
+        /*
+         * Start next transaction, if available.
+         */
+        if (radio2_queue_count > 0U)
+        {
+            radio_start_next_transaction(RADIO_ID_2);
+        }
+    }
+}
+
+void radio_transaction_send_next_fragment(radio_ack_transaction_t *transaction)
+{
+    uint8_t can_frame[8];
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (!transaction->active)
+    {
+        return;
+    }
+
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        return;
+    }
+
+    radio_build_fragment_from_transaction(can_frame, transaction, transaction->seq_index);
+
+    if (transaction->radio_id == RADIO_ID_1)
+    {
+        canTransmit(canREG1, RADIO1_TX_MB, can_frame);
+        canTransmit(canREG2, RADIO1_TX_MB, can_frame);
+    }
+    else if (transaction->radio_id == RADIO_ID_2)
+    {
+        canTransmit(canREG1, RADIO2_TX_MB, can_frame);
+        canTransmit(canREG2, RADIO2_TX_MB, can_frame);
+    }
+    else
+    {
+        return;
+    }
+
+    transaction->seq_index++;
+
+    /*
+     * Complete application packet transmitted.
+     */
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        /*
+         * Reset fragment index.
+         *
+         * This also tells the scheduler that
+         * the complete packet has been transmitted.
+         */
+        transaction->seq_index = 0U;
+
+        /*
+         * NOW start ACK timeout.
+         */
+        transaction->start_time = system_ms;
+
+        radio_info_ack_tx_done();
+    }
+}
+
+static void radio_ack_received(radio_id_t radio_id, uint8_t action_type, uint8_t ack_status)
+{
+    radio_ack_transaction_t *transaction;
+
+    transaction = radio_get_transaction(radio_id);
+
+    /*
+     * No transaction waiting.
+     */
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (!transaction->active)
+    {
+        return;
+    }
+
+    /*
+     * ACK must correspond to the packet
+     * currently at the head of the queue.
+     */
+    if (transaction->pkt_type != action_type)
+    {
+        return;
+    }
+
+    if (ack_status == CPU_ACK_OK)
+    {
+        /*
+         * Transaction successful.
+         */
+
+        radio_pop_transaction(radio_id);
+    }
+    else
+    {
+        /*
+         * Radio explicitly rejected packet.
+         *
+          TODO:
+         * Set Radio communication/application fault.
+         */
+
+        /*
+         * Remove failed transaction and
+         * continue with next queued transaction.
+         */
+        radio_pop_transaction(radio_id);
+    }
+}
+
+void radio_ack_process(void)
+{
+    radio_ack_transaction_t *transaction;
+
+    /* ========================================================
+     * RADIO 1
+     * ======================================================== */
+    transaction = radio_get_transaction(RADIO_ID_1);
+
+    if (transaction != NULL)
+    {
+        /*
+         * Make sure head transaction is active.
+         */
+        if (!transaction->active)
+        {
+            radio_start_next_transaction(RADIO_ID_1);
+        }
+        else if (transaction->start_time != 0U)
+        {
+            /*
+             * ACK timeout.
+             */
+            if ((system_ms - transaction->start_time) >= RADIO_ACK_TIMEOUT_MS)
+            {
+                if (transaction->retry_count < RADIO_ACK_MAX_RETRIES)
+                {
+                    /*
+                     * Retry same complete packet.
+                     */
+                    transaction->retry_count++;
+                    /*
+                     * Start again from fragment 0.
+                     */
+                    transaction->seq_index = 0U;
+                    /*
+                     * Clear timer until the complete
+                     * packet has been transmitted again.
+                     */
+                    transaction->start_time = 0U;
+                }
+                else
+                {
+                    /*
+                     * Maximum retries exhausted.
+                     */
+
+                    /*
+                      TODO:
+                     * Radio 1 communication fault.
+                     */
+
+                    radio_pop_transaction(RADIO_ID_1);
+                }
+            }
+        }
+    }
+
+
+    /* ========================================================
+     * RADIO 2
+     * ======================================================== */
+
+    transaction = radio_get_transaction(RADIO_ID_2);
+
+    if (transaction != NULL)
+    {
+        /*
+         * Make sure head transaction is active.
+         */
+        if (!transaction->active)
+        {
+            radio_start_next_transaction(RADIO_ID_2);
+        }
+        else if (transaction->start_time != 0U)
+        {
+            /*
+             * ACK timeout.
+             */
+            if ((system_ms - transaction->start_time) >= RADIO_ACK_TIMEOUT_MS)
+            {
+                if (transaction->retry_count < RADIO_ACK_MAX_RETRIES)
+                {
+                    /*
+                     * Retry same complete packet.
+                     */
+                    transaction->retry_count++;
+                    /*
+                     * Restart from fragment 0.
+                     */
+                    transaction->seq_index = 0U;
+                    /*
+                     * Timer will restart after
+                     * complete retransmission.
+                     */
+                    transaction->start_time = 0U;
+                }
+                else
+                {
+                    /*
+                     * Maximum retries exhausted.
+                     */
+
+                    /*
+                      TODO:
+                     * Radio 2 communication fault.
+                     */
+
+                    radio_pop_transaction(RADIO_ID_2);
+                }
+            }
+        }
+    }
+}
+//!==========================================================================
+//!==========================================================================
+
 uint8_t tx_buf[8];
 uint32_t tx_mb;
-void radio_send_arp(radio_id_t radio_id)
-{
-    tx_mb = (radio_id == RADIO_ID_1) ? RADIO1_TX_MB : RADIO2_TX_MB;
-    radio_ctx.payload_len = radio_build_arp_payload(radio_ctx.payload);
-    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) /RADIO_PAYLOAD_BYTES;
-
-    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
-        return;
-
-    radio_can_arp_transmit_flag = 1;
-}
+//void radio_send_arp(radio_id_t radio_id)
+//{
+//    tx_mb = (radio_id == RADIO_ID_1) ? RADIO1_TX_MB : RADIO2_TX_MB;
+//    radio_ctx.payload_len = radio_build_arp_payload(radio_ctx.payload);
+//    radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) /RADIO_PAYLOAD_BYTES;
+//
+//    if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
+//        return;
+//
+//    radio_can_arp_transmit_flag = 1;
+//}
 
 /* ================= RX: ONBOARD REGULAR PACKET ================= */
 
@@ -737,15 +1264,14 @@ void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
      * Byte 4-7 : RESERVED
      * -------------------------------------------------------- */
 
-    ack_can_id = ((uint16_t)data[0] << 8)
-               |  (uint16_t)data[1];
+    ack_can_id = ((uint16_t)data[0] << 8) |  (uint16_t)data[1];
 
     action_type = data[2];
     ack_status  = data[3];
 
     /* --------------------------------------------------------
-     * Verify ACTION_TYPE is ARP or ORP
-     * -------------------------------------------------------- */
+     * Verify ACTION_TYPE belongs to a STCAS Radio TX packet */
+
     if ((action_type != ACK_ACTION_RADIO_AAP) &&
         (action_type != ACK_ACTION_RADIO_AEP) &&
         (action_type != ACK_ACTION_RADIO_REG_TYPE1) &&
@@ -763,12 +1289,18 @@ void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
         radio1_ack_received = 1U;
         radio1_ack_action   = action_type;
         radio1_ack_status   = ack_status;
+        radio_ack_received(RADIO_ID_1, action_type, ack_status);
     }
-    else
+    else if (can_id == RADIO2_ACK_CAN_ID)
     {
         radio2_ack_received = 1U;
         radio2_ack_action   = action_type;
         radio2_ack_status   = ack_status;
+        radio_ack_received(RADIO_ID_2, action_type, ack_status);
+    }
+    else
+    {
+        return;
     }
 }
 
@@ -970,14 +1502,18 @@ void radio_send_aap(radio_id_t radio_id)
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-    uint8_t i; // Loop runs 5 times (for 5 frames)
-    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    uint8_t i; // Loop runs 5 times (for 5 frames)
+//    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    {
+//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AAP,radio_ctx.seq_total,i);
+//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//    }
+    if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_AAP))
     {
-        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AAP,radio_ctx.seq_total,i);
-        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        return;
     }
-    radio_info_ack_tx_done();
+//    radio_info_ack_tx_done();
 }
 
 /*
@@ -1065,14 +1601,18 @@ void radio_send_aep(radio_id_t radio_id)
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-    uint8_t i; // Loop runs 5 times (for 5 frames)
-    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    uint8_t i; // Loop runs 5 times (for 5 frames)
+//    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    {
+//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AEP,radio_ctx.seq_total,i);
+//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//    }
+    if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_AEP))
     {
-        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AEP,radio_ctx.seq_total,i);
-        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        return;
     }
-    radio_info_ack_tx_done();
+//    radio_info_ack_tx_done();
 }
 
 //static uint8_t radio_is_track_profile_valid(void)
@@ -1318,7 +1858,7 @@ static void radio_process_complete_packet(void)
 
     case RADIO_PKT_TYPE_ARP:
         result = radio_parse_arp(radio_rx_ctx.payload, radio_rx_ctx.payload_len);
-        if (result) 
+        if (result)
         {
           send_cpu_universal_ack((uint16_t)radio_rx_can_id, ACK_ACTION_RADIO_ARP, CPU_ACK_OK);
         }
@@ -1358,7 +1898,7 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
     uint32_t source_stn_id = g_my_stn_id;
 
     /* PKT_TYPE : 4 bits */
-    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_REG_TYPE1);
     bit_index += 4;
 
     /* PKT_LEN : 7 bits (filled later) */
@@ -1988,14 +2528,18 @@ void radio_send_reg_type1(radio_id_t radio_id)
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-    uint8_t i; // Loop runs 5 times (for 5 frames)
-    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    uint8_t i; // Loop runs 5 times (for 5 frames)
+//    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    {
+//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE1,radio_ctx.seq_total,i);
+//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//    }
+    if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_REG_TYPE1))
     {
-        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE1,radio_ctx.seq_total,i);
-        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        return;
     }
-    radio_info_ack_tx_done();
+//    radio_info_ack_tx_done();
 }
 
 static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
@@ -2010,7 +2554,7 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
     uint32_t source_stn_id = g_my_stn_id;
 
     /* PKT_TYPE : 4 bits */
-    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_AAP);
+    set_bits(buf, bit_index, 4, RADIO_PKT_TYPE_REG_TYPE2);
     bit_index += 4;
 
     /* PKT_LEN : 7 bits (filled later) */
@@ -2202,21 +2746,59 @@ void radio_send_reg_type2(radio_id_t radio_id)
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-    uint8_t i; // Loop runs 5 times (for 5 frames)
-    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    uint8_t i; // Loop runs 5 times (for 5 frames)
+//    for ( i = 0; i < radio_ctx.seq_total; i++)
+//    {
+//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE2,radio_ctx.seq_total,i);
+//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+//    }
+    if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_REG_TYPE2))
     {
-        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE2,radio_ctx.seq_total,i);
-        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
+        return;
     }
-    radio_info_ack_tx_done();
+//    radio_info_ack_tx_done();
 }
 
-void check_for_transmit_arp(void)
+void radio_tx_process(void)
 {
-    if(comm_mandatory_area && (approaching_station_id != prev_stn_id))
+    radio_ack_transaction_t *transaction;
+
+    /* ========================================================
+     * RADIO 1
+     * ======================================================== */
+
+    transaction = radio_get_transaction(RADIO_ID_1);
+
+    if (transaction != NULL)
     {
-        radio_send_arp(RADIO_ID_1);
-        radio_send_arp(RADIO_ID_2);
+        if (transaction->active && transaction->start_time == 0U)
+        {
+            radio_transaction_send_next_fragment(transaction);
+        }
+    }
+
+
+    /* ========================================================
+     * RADIO 2
+     * ======================================================== */
+
+    transaction = radio_get_transaction(RADIO_ID_2);
+
+    if (transaction != NULL)
+    {
+        if (transaction->active && transaction->start_time == 0U)
+        {
+            radio_transaction_send_next_fragment(transaction);
+        }
     }
 }
+
+//void check_for_transmit_arp(void)
+//{
+//    if(comm_mandatory_area && (approaching_station_id != prev_stn_id))
+//    {
+//        radio_send_arp(RADIO_ID_1);
+//        radio_send_arp(RADIO_ID_2);
+//    }
+//}

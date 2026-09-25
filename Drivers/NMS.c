@@ -6,9 +6,266 @@
 #include <string.h>
 
 //static uint16_t nms_msg_seq = 0;
-volatile uint8_t nms_ack_received = 0U;
+volatile uint8_t nms_ack_received_flag = 0U;
 volatile uint8_t nms_ack_action = 0U;
 volatile uint8_t nms_ack_status = 0U;
+
+
+static nms_ack_transaction_t nms_transaction_queue[NMS_TRANSACTION_QUEUE_SIZE];
+
+static uint8_t nms_queue_head = 0U;
+static uint8_t nms_queue_tail = 0U;
+static uint8_t nms_queue_count = 0U;
+static void nms_build_fragment(uint8_t *can_frame, const nms_ack_transaction_t *transaction);
+
+static uint8_t nms_queue_is_full(void)
+{
+    return (nms_queue_count >= NMS_TRANSACTION_QUEUE_SIZE);
+}
+static nms_ack_transaction_t *nms_get_transaction(void)
+{
+    if (nms_queue_count == 0U)
+    {
+        return NULL;
+    }
+
+    return &nms_transaction_queue[nms_queue_head];
+}
+void nms_ack_transaction_start(uint8_t pkt_type, const uint8_t *payload, uint16_t payload_len)
+{
+    nms_ack_transaction_t *transaction;
+
+    if (payload == NULL)
+    {
+        return;
+    }
+
+    if (payload_len == 0U)
+    {
+        return;
+    }
+
+    if (payload_len > NMS_MAX_PAYLOAD_LEN)
+    {
+        return;
+    }
+
+    if (nms_queue_is_full())
+    {
+        return;
+    }
+
+    transaction = &nms_transaction_queue[nms_queue_tail];
+
+    transaction->pkt_type    = pkt_type;
+    transaction->payload_len = payload_len;
+
+    memcpy(transaction->payload, payload, payload_len);
+
+    transaction->seq_total = (uint8_t)((payload_len + NMS_PAYLOAD_BYTES - 1U) / NMS_PAYLOAD_BYTES);
+
+    if (transaction->seq_total == 0U)
+    {
+        return;
+    }
+
+    if (transaction->seq_total > NMS_MAX_FRAGMENTS)
+    {
+        return;
+    }
+
+    transaction->seq_index   = 0U;
+    transaction->retry_count = 0U;
+    transaction->active      = 0U;
+    transaction->start_time  = 0U;
+
+    nms_queue_tail++;
+
+    if (nms_queue_tail >= NMS_TRANSACTION_QUEUE_SIZE)
+    {
+        nms_queue_tail = 0U;
+    }
+
+    nms_queue_count++;
+
+    /*
+     * First transaction becomes active.
+     */
+    if (nms_queue_count == 1U)
+    {
+        transaction->active = 1U;
+    }
+}
+static void nms_transaction_send_next_fragment(nms_ack_transaction_t *transaction)
+{
+    uint8_t can_frame[8];
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        return;
+    }
+
+    nms_build_fragment(can_frame, transaction);
+
+    // while (canIsTxMessagePending(canREG1, NMS_TX_MB) != 0U)
+    // {
+    // }
+
+    canTransmit(canREG1, NMS_TX_MB, can_frame);
+    canTransmit(canREG2, NMS_TX_MB, can_frame);
+
+    transaction->seq_index++;
+
+    /*
+     * Complete message transmitted.
+     * Now wait for NMS ACK.
+     */
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        transaction->seq_index = 0U;
+        transaction->start_time = system_ms;
+    }
+}
+
+static void nms_pop_transaction(void)
+{
+    nms_ack_transaction_t *transaction;
+
+    transaction = nms_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    transaction->active = 0U;
+
+    nms_queue_head++;
+
+    if (nms_queue_head >= NMS_TRANSACTION_QUEUE_SIZE)
+    {
+        nms_queue_head = 0U;
+    }
+
+    nms_queue_count--;
+
+    if (nms_queue_count > 0U)
+    {
+        transaction = nms_get_transaction();
+
+        transaction->seq_index   = 0U;
+        transaction->retry_count = 0U;
+        transaction->start_time  = 0U;
+        transaction->active      = 1U;
+    }
+}
+
+void nms_ack_received(uint8_t action_type, uint8_t ack_status)
+{
+    nms_ack_transaction_t *transaction;
+
+    transaction = nms_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (transaction->active == 0U)
+    {
+        return;
+    }
+
+    if (ack_status == CPU_ACK_OK)
+    {
+        nms_pop_transaction();
+    }
+    else
+    {
+        nms_pop_transaction();
+    }
+}
+void nms_ack_process(void)
+{
+    nms_ack_transaction_t *transaction;
+
+    if (nms_queue_count == 0U)
+    {
+        return;
+    }
+
+    transaction = nms_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (transaction->active == 0U)
+    {
+        transaction->active = 1U;
+        transaction->seq_index = 0U;
+        transaction->retry_count = 0U;
+        transaction->start_time = 0U;
+
+        return;
+    }
+
+    /*
+     * Still transmitting fragments.
+     */
+    if (transaction->start_time == 0U)
+    {
+        return;
+    }
+
+    /*
+     * Waiting for ACK.
+     */
+    if ((system_ms - transaction->start_time) >= NMS_ACK_TIMEOUT_MS)
+    {
+        if (transaction->retry_count < NMS_ACK_MAX_RETRIES)
+        {
+            transaction->retry_count++;
+
+            /*
+             * Retransmit complete NMS packet.
+             */
+            transaction->seq_index = 0U;
+            transaction->start_time = 0U;
+        }
+        else
+        {
+            /*
+             * Final failure.
+             * NMS fault handling can be added here.
+             */
+            nms_pop_transaction();
+        }
+    }
+}
+
+void nms_tx_process(void)
+{
+    nms_ack_transaction_t *transaction;
+
+    if (nms_queue_count == 0U)
+    {
+        return;
+    }
+
+    transaction = nms_get_transaction();
+
+    if ((transaction != NULL) && (transaction->active != 0U) && (transaction->start_time == 0U))
+    {
+        nms_transaction_send_next_fragment(transaction);
+    }
+}
 
 nms_tx_ctx_t nms_ctx;
 static void set_bits(uint8_t *buf, uint16_t bit, uint8_t len, uint32_t value)
@@ -27,22 +284,62 @@ static void set_bits(uint8_t *buf, uint16_t bit, uint8_t len, uint32_t value)
     }
 }
 
-static void nms_build_fragment(uint8_t *can_frame, uint8_t pkt_type,uint8_t seq_total, uint8_t seq_index) 
+//static void nms_build_fragment(uint8_t *can_frame, uint8_t pkt_type,uint8_t seq_total, uint8_t seq_index)
+//{
+//    uint8_t seq_total_lsb;
+//    uint8_t seq_total_msb;
+//    seq_total_lsb = seq_total & 0x0F;
+//    seq_total_msb = (seq_total >> 4) & 0x03;
+//    can_frame[0] = (seq_total_lsb << 4) | (pkt_type & 0x0F);
+//    can_frame[1] = ((seq_index & 0x3F) << 2) | seq_total_msb;
+//    uint16_t payload_offset = seq_index * NMS_PAYLOAD_BYTES;
+//
+//    for (uint8_t i = 0; i < NMS_PAYLOAD_BYTES; i++)
+//    {
+//        if ((payload_offset + i) < nms_ctx.payload_len)
+//            can_frame[2 + i] = nms_ctx.payload[payload_offset + i];
+//        else
+//            can_frame[2 + i] = 0x00;
+//    }
+//}
+static void nms_build_fragment(uint8_t *can_frame, const nms_ack_transaction_t *transaction)
 {
     uint8_t seq_total_lsb;
     uint8_t seq_total_msb;
-    seq_total_lsb = seq_total & 0x0F;
-    seq_total_msb = (seq_total >> 4) & 0x03;
-    can_frame[0] = (seq_total_lsb << 4) | (pkt_type & 0x0F);
-    can_frame[1] = ((seq_index & 0x3F) << 2) | seq_total_msb;
-    uint16_t payload_offset = seq_index * NMS_PAYLOAD_BYTES;
+    uint16_t payload_offset;
+    uint8_t i;
 
-    for (uint8_t i = 0; i < NMS_PAYLOAD_BYTES; i++)
+    memset(can_frame, 0, 8U);
+
+    seq_total_lsb =
+        transaction->seq_total & 0x0FU;
+
+    seq_total_msb =
+        (transaction->seq_total >> 4) & 0x03U;
+
+    can_frame[0] =
+        (uint8_t)((seq_total_lsb << 4) |
+                  (transaction->pkt_type & 0x0FU));
+
+    can_frame[1] =
+        (uint8_t)(((transaction->seq_index & 0x3FU) << 2) |
+                  seq_total_msb);
+
+    payload_offset =
+        (uint16_t)transaction->seq_index *
+        NMS_PAYLOAD_BYTES;
+
+    for (i = 0U; i < NMS_PAYLOAD_BYTES; i++)
     {
-        if ((payload_offset + i) < nms_ctx.payload_len) 
-            can_frame[2 + i] = nms_ctx.payload[payload_offset + i];
+        if ((payload_offset + i) < transaction->payload_len)
+        {
+            can_frame[2U + i] =
+                transaction->payload[payload_offset + i];
+        }
         else
-            can_frame[2 + i] = 0x00;
+        {
+            can_frame[2U + i] = 0U;
+        }
     }
 }
 
@@ -1694,74 +1991,96 @@ static uint16_t build_skavach_fault_msg_payload_to_nms(uint8_t *buf)
 // FUNCTIONS FOR SENDING MESSEGES TO NMS
 void send_skavach_info_msg_to_nms(uint8_t skavach_info_frame_num)
 {
-    uint8_t can_frame[8];
-    nms_ctx.payload_len = build_info_payload_to_nms(nms_ctx.payload);
-    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) / NMS_PAYLOAD_BYTES;
+    uint16_t payload_len;
 
-    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+    (void)skavach_info_frame_num;
+
+    payload_len = build_info_payload_to_nms(nms_ctx.payload);
+
+    if ((payload_len == 0U) || (payload_len > NMS_MAX_PAYLOAD_LEN))
+    {
         return;
+    }
 
-    nms_build_fragment(can_frame,NMS_PKT_TYPE_INFO,nms_ctx.seq_total, skavach_info_frame_num);
-    canTransmit(canREG1, NMS_TX_MB, can_frame);
-    canTransmit(canREG2, NMS_TX_MB, can_frame);
+    nms_ack_transaction_start(NMS_PKT_TYPE_INFO, nms_ctx.payload, payload_len);
 }
 
 void send_skavach_health_msg_to_nms(uint8_t skavach_health_frame_num)
 {
-    uint8_t can_frame[8];
-    nms_ctx.payload_len = build_health_payload_to_nms(nms_ctx.payload);
-    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) / NMS_PAYLOAD_BYTES;
+    uint16_t payload_len;
 
-    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+    (void)skavach_health_frame_num;
+
+    payload_len = build_health_payload_to_nms(nms_ctx.payload);
+
+    if ((payload_len == 0U) || (payload_len > NMS_MAX_PAYLOAD_LEN))
+    {
         return;
+    }
 
-    nms_build_fragment(can_frame,NMS_PKT_TYPE_HEALTH,nms_ctx.seq_total, skavach_health_frame_num);
-    canTransmit(canREG1, NMS_TX_MB, can_frame);
-    canTransmit(canREG2, NMS_TX_MB, can_frame);
+    nms_ack_transaction_start(NMS_PKT_TYPE_HEALTH, nms_ctx.payload, payload_len);
 }
 
 void send_skavach_rssi_msg_to_nms(uint8_t skavach_rssi_frame_num)
 {
-    uint8_t can_frame[8];
-    nms_ctx.payload_len = build_skavach_rssi_msg_payload_to_nms(nms_ctx.payload);
-    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) / NMS_PAYLOAD_BYTES;
+    uint16_t payload_len;
 
-    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+    (void)skavach_rssi_frame_num;
+
+    payload_len = build_skavach_rssi_msg_payload_to_nms(nms_ctx.payload);
+
+    if ((payload_len == 0U) || (payload_len > NMS_MAX_PAYLOAD_LEN))
+    {
         return;
+    }
 
-    nms_build_fragment(can_frame,NMS_PKT_TYPE_RSSI,nms_ctx.seq_total, skavach_rssi_frame_num);
-    canTransmit(canREG1, NMS_TX_MB, can_frame);
-    canTransmit(canREG2, NMS_TX_MB, can_frame);
+    nms_ack_transaction_start(NMS_PKT_TYPE_RSSI, nms_ctx.payload, payload_len);
 }
 
 void send_skavach_fault_msg_to_nms(uint8_t skavach_fault_frame_num)
 {
-    uint8_t can_frame[8];
-    nms_ctx.payload_len = build_skavach_fault_msg_payload_to_nms(nms_ctx.payload);
-    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) / NMS_PAYLOAD_BYTES;
+    uint16_t payload_len;
 
-    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+    (void)skavach_fault_frame_num;
+
+    payload_len = build_skavach_fault_msg_payload_to_nms(nms_ctx.payload);
+
+    if ((payload_len == 0U) || (payload_len > NMS_MAX_PAYLOAD_LEN))
+    {
         return;
+    }
 
-    nms_build_fragment(can_frame,NMS_PKT_TYPE_FAULT,nms_ctx.seq_total, skavach_fault_frame_num);
-    canTransmit(canREG1,NMS_TX_MB , can_frame);
-    canTransmit(canREG2,NMS_TX_MB , can_frame);
+    nms_ack_transaction_start(NMS_PKT_TYPE_FAULT, nms_ctx.payload, payload_len);
 }
 
+//void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num)
+//{
+//    uint8_t can_frame[8];
+//    nms_ctx.payload_len = build_lkavach_position_info_payload_to_nms(nms_ctx.payload);
+//    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) /NMS_PAYLOAD_BYTES;
+//
+//    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+//        return;
+//
+//    nms_build_fragment(can_frame,NMS_PKT_TYPE_POS_INFO,nms_ctx.seq_total, stn_loco_postion_frame_num);
+//    canTransmit(canREG1,NMS_TX_MB, can_frame);
+//    canTransmit(canREG2,NMS_TX_MB, can_frame);
+//}
 void send_loco_postion_info_to_nms(uint8_t stn_loco_postion_frame_num)
 {
-    uint8_t can_frame[8];
-    nms_ctx.payload_len = build_lkavach_position_info_payload_to_nms(nms_ctx.payload);
-    nms_ctx.seq_total = (nms_ctx.payload_len + NMS_PAYLOAD_BYTES - 1U) /NMS_PAYLOAD_BYTES;
+    uint16_t payload_len;
 
-    if (nms_ctx.seq_total >= NMS_MAX_FRAGMENTS)
+    (void)stn_loco_postion_frame_num;
+
+    payload_len = build_lkavach_position_info_payload_to_nms(nms_ctx.payload);
+
+    if ((payload_len == 0U) || (payload_len > NMS_MAX_PAYLOAD_LEN))
+    {
         return;
+    }
 
-    nms_build_fragment(can_frame,NMS_PKT_TYPE_POS_INFO,nms_ctx.seq_total, stn_loco_postion_frame_num);
-    canTransmit(canREG1,NMS_TX_MB, can_frame);
-    canTransmit(canREG2,NMS_TX_MB, can_frame);
+    nms_ack_transaction_start(NMS_PKT_TYPE_POS_INFO, nms_ctx.payload, payload_len);
 }
-
 
 void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
 {
@@ -1786,7 +2105,7 @@ void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
     }
 
     /* Store / process ACK */
-    nms_ack_received = 1U;
+    nms_ack_received_flag = 1U;
     nms_ack_action = action_type;
     nms_ack_status = ack_status;
 }

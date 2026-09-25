@@ -33,7 +33,6 @@ static uint8_t rx_data_radio[8];
 static uint32_t rx_id;
 static uint8_t rx_dmi_pilot[8];
 static uint8_t rx_data_smocip[8];
-static uint8_t rx_ack_counter_card[8];
 static uint8_t rx_ack_datalogger[8];
 static uint8_t rx_ack_nms[8];
 
@@ -122,52 +121,6 @@ void send_cpu_universal_ack(uint16_t peripheral_can_id, uint8_t action_type, uin
 
     canTransmit(canREG1, canMESSAGE_BOX9, tx_buf);
     canTransmit(canREG2, canMESSAGE_BOX9, tx_buf);
-}
-
-/* ============================================================
- *  COUNTER CARD ACK RX
- * ============================================================ */
-
-static void counter_card_ack_rx_handle(uint32_t can_id, uint8_t *data)
-{
-    uint16_t ack_can_id;
-    uint8_t action_type;
-    uint8_t ack_status;
-
-    /* CAN ID should be 0x201 */
-    if (can_id != COUNTER_CARD_ACK_CAN_ID)
-    {
-        return;
-    }
-
-    /* Byte 0-1 : ACK_CAN_ID */
-    ack_can_id = ((uint16_t)data[0] << 8) | (uint16_t)data[1];
-
-    /* Byte 2 : ACTION_TYPE */
-    action_type = data[2];
-
-    /* Byte 3 : ACK_STATUS */
-    ack_status = data[3];
-
-    /*
-    * For Counter Card command:
-    *
-    * CPU TX CAN ID = 0x200
-    *
-    * Therefore ACK must contain:
-    * ACK_CAN_ID = 0x0200
-    */
-    if (ack_can_id != 0x0200U)
-    {
-        return;
-    }
-
-    /*
-    * At this point the ACK is a valid acknowledgement
-    * for the Counter Card command.
-    *
-    * Add application handling here.
-    */
 }
 
 /* ============================================================
@@ -292,13 +245,6 @@ void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source)
 
         return;
     }
-    /* ---------- COUNTER CARD ACK RX ---------- */
-    //! 0x201
-    if (can_id == COUNTER_CARD_ACK_CAN_ID)
-    {
-        counter_card_ack_rx_handle(can_id, data);
-        return;
-    }
     /* ---------- DATALOGGER ACK RX ---------- */
     //! 0x211
     if (can_id == DATA_LOGGER_ACK_CAN_ID)
@@ -345,17 +291,6 @@ void send_gsm_start_req(uint8_t gsm_id, uint8_t action)
 
     canTransmit(canREG1, canMESSAGE_BOX7, tx_buf);
     canTransmit(canREG2, canMESSAGE_BOX7, tx_buf);
-}
-
-void send_Counter_Change_req(uint8_t flagSet)
-{
-    uint8_t tx_buf[8] = {0};
-
-    tx_buf[0] = flagSet;
-    //tx_buf[0] |= (FutureUse << 5);
-    //txbuf[1] to txbuf[7] reserved
-    canTransmit(canREG1, canMESSAGE_BOX15, tx_buf);
-    canTransmit(canREG2, canMESSAGE_BOX15, tx_buf);
 }
 
 void send_Data_Log(uint8_t count)
@@ -466,14 +401,6 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
       rx_id = canGetID(node, messageBox);
 
       can_if_process_rx(rx_id, rx_data_smocip, can_source);
-    }
-    //! 0x201 - Counter Card Ack
-    else if (messageBox == canMESSAGE_BOX23)
-    {
-      canGetData(node, messageBox, rx_ack_counter_card);
-      rx_id = canGetID(node, messageBox);
-
-      can_if_process_rx(rx_id, rx_ack_counter_card, can_source);
     }
     //! 0x211 - Datalogger Ack
     else if (messageBox == canMESSAGE_BOX24)
