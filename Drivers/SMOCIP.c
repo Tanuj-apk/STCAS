@@ -1,11 +1,12 @@
 #include "SMOCIP.h"
 #include "can.h"
 #include <string.h>
+#include "gps.h"
 
 smocip_tx_t smocip_tx;
 smocip_rx_t smocip_rx;
 
-/* 18-byte payload */
+/* 31-byte payload */
 static uint8_t smocip_payload[31];
 
 typedef struct {
@@ -16,9 +17,314 @@ typedef struct {
 static smocip_can_frame_ctx_t smocip_can1;
 static smocip_can_frame_ctx_t smocip_can2;
 
-volatile uint8_t smocip_ack_received = 0U;
+volatile uint8_t smocip_ack_received_flag = 0U;
 volatile uint8_t smocip_ack_action = 0U;
 volatile uint8_t smocip_ack_status = 0U;
+
+static smocip_transaction_t smocip_transaction_queue[SMOCIP_TRANSACTION_QUEUE_SIZE];
+
+static uint8_t smocip_queue_head  = 0U;
+static uint8_t smocip_queue_tail  = 0U;
+static uint8_t smocip_queue_count = 0U;
+
+static uint8_t smocip_queue_is_full(void)
+{
+    return (smocip_queue_count >= SMOCIP_TRANSACTION_QUEUE_SIZE);
+}
+static smocip_transaction_t *smocip_get_transaction(void)
+{
+    if (smocip_queue_count == 0U)
+    {
+        return NULL;
+    }
+
+    return &smocip_transaction_queue[smocip_queue_head];
+}
+
+void smocip_transaction_start(uint8_t pkt_type, const uint8_t *payload, uint16_t payload_len)
+{
+    smocip_transaction_t *transaction;
+
+    if (payload == NULL)
+    {
+        return;
+    }
+
+    if (payload_len == 0U)
+    {
+        return;
+    }
+
+    if (payload_len > SMOCIP_MAX_PAYLOAD_LEN)
+    {
+        return;
+    }
+
+    if (smocip_queue_is_full())
+    {
+        return;
+    }
+
+    transaction = &smocip_transaction_queue[smocip_queue_tail];
+
+    transaction->pkt_type    = pkt_type;
+    transaction->payload_len = payload_len;
+
+    memcpy(transaction->payload, payload, payload_len);
+
+    transaction->seq_total =
+        (uint8_t)((payload_len + SMOCIP_PAYLOAD_BYTES - 1U) /
+                  SMOCIP_PAYLOAD_BYTES);
+
+    if (transaction->seq_total == 0U)
+    {
+        return;
+    }
+
+    if (transaction->seq_total > SMOCIP_MAX_FRAGMENTS)
+    {
+        return;
+    }
+
+    transaction->seq_index  = 0U;
+    transaction->retry_count = 0U;
+    transaction->active     = 0U;
+    transaction->start_time = 0U;
+
+    smocip_queue_tail++;
+
+    if (smocip_queue_tail >= SMOCIP_TRANSACTION_QUEUE_SIZE)
+    {
+        smocip_queue_tail = 0U;
+    }
+
+    smocip_queue_count++;
+
+    /*
+     * First transaction becomes active.
+     */
+    if (smocip_queue_count == 1U)
+    {
+        transaction->active = 1U;
+    }
+}
+
+static void smocip_pop_transaction(void)
+{
+    smocip_transaction_t *transaction;
+
+    transaction = smocip_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    transaction->active = 0U;
+
+    smocip_queue_head++;
+
+    if (smocip_queue_head >= SMOCIP_TRANSACTION_QUEUE_SIZE)
+    {
+        smocip_queue_head = 0U;
+    }
+
+    smocip_queue_count--;
+
+    /*
+     * Activate next transaction.
+     */
+    if (smocip_queue_count > 0U)
+    {
+        transaction = smocip_get_transaction();
+
+        transaction->seq_index   = 0U;
+        transaction->retry_count = 0U;
+        transaction->start_time  = 0U;
+        transaction->active      = 1U;
+    }
+}
+
+static void smocip_transaction_send_next_fragment(smocip_transaction_t *transaction)
+{
+    uint8_t tx_buf[8];
+    uint16_t payload_offset;
+    uint8_t i;
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        return;
+    }
+
+    memset(tx_buf, 0, sizeof(tx_buf));
+
+    /*
+     * Byte 0:
+     *
+     * Bits 7-4 : Sequence total LSB
+     * Bits 3-0 : Packet type
+     */
+    tx_buf[0] =
+        (uint8_t)(((transaction->seq_total & 0x0FU) << 4) |
+                  (transaction->pkt_type & 0x0FU));
+
+    /*
+     * Byte 1:
+     *
+     * Bits 7-2 : Sequence index
+     * Bits 1-0 : Sequence total MSB
+     */
+    tx_buf[1] =
+        (uint8_t)(((transaction->seq_index & 0x3FU) << 2) |
+                  ((transaction->seq_total >> 4) & 0x03U));
+
+    payload_offset =
+        (uint16_t)transaction->seq_index *
+        SMOCIP_PAYLOAD_BYTES;
+
+    for (i = 0U; i < SMOCIP_PAYLOAD_BYTES; i++)
+    {
+        if ((payload_offset + i) < transaction->payload_len)
+        {
+            tx_buf[2U + i] =
+                transaction->payload[payload_offset + i];
+        }
+        else
+        {
+            tx_buf[2U + i] = 0U;
+        }
+    }
+
+    /*
+     * Redundant transmission on CAN1 and CAN2.
+     */
+    canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
+    canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
+
+    transaction->seq_index++;
+
+    /*
+     * Complete SMOCIP packet transmitted.
+     * Now wait for ACK.
+     */
+    if (transaction->seq_index >= transaction->seq_total)
+    {
+        transaction->seq_index = 0U;
+        transaction->start_time = system_ms;
+    }
+}
+
+void smocip_ack_received(uint8_t ack_status)
+{
+    smocip_transaction_t *transaction;
+
+    transaction = smocip_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    if (transaction->active == 0U)
+    {
+        return;
+    }
+
+    if (ack_status == CPU_ACK_OK)
+    {
+        smocip_pop_transaction();
+    }
+}
+
+void smocip_ack_process(void)
+{
+    smocip_transaction_t *transaction;
+
+    if (smocip_queue_count == 0U)
+    {
+        return;
+    }
+
+    transaction = smocip_get_transaction();
+
+    if (transaction == NULL)
+    {
+        return;
+    }
+
+    /*
+     * Make sure current transaction is active.
+     */
+    if (transaction->active == 0U)
+    {
+        transaction->active      = 1U;
+        transaction->seq_index   = 0U;
+        transaction->retry_count = 0U;
+        transaction->start_time  = 0U;
+
+        return;
+    }
+
+    /*
+     * Still transmitting fragments.
+     */
+    if (transaction->start_time == 0U)
+    {
+        return;
+    }
+
+    /*
+     * Waiting for ACK.
+     */
+    if ((system_ms - transaction->start_time) >=
+        SMOCIP_ACK_TIMEOUT_MS)
+    {
+        if (transaction->retry_count <
+            SMOCIP_ACK_MAX_RETRIES)
+        {
+            transaction->retry_count++;
+
+            /*
+             * Retransmit complete SMOCIP packet.
+             */
+            transaction->seq_index  = 0U;
+            transaction->start_time = 0U;
+        }
+        else
+        {
+            /*
+             * Final failure.
+             *
+             * SMOCIP fault handling can be added here.
+             */
+            smocip_pop_transaction();
+        }
+    }
+}
+
+void smocip_tx_process(void)
+{
+    smocip_transaction_t *transaction;
+
+    if (smocip_queue_count == 0U)
+    {
+        return;
+    }
+
+    transaction = smocip_get_transaction();
+
+    if ((transaction != NULL) &&
+        (transaction->active != 0U) &&
+        (transaction->start_time == 0U))
+    {
+        smocip_transaction_send_next_fragment(transaction);
+    }
+}
 
 //! ============ TEST DATA ==================
 void smocip_test_data_init(void)
@@ -110,23 +416,29 @@ void smocip_build_payload(void)
     smocip_payload[30] = (uint8_t)(smocip_tx.riu_checksum);
 }
 
-void smocip_send_can(uint8_t seq_index) 
+//void smocip_send_can(uint8_t seq_index)
+//{
+//  uint8_t tx_buf[8] = {0};
+//
+//  tx_buf[0] = (SMOCIP_PKT_TYPE & 0x0FU) | ((SMOCIP_SEQ_TOTAL << 4) & 0xF0U);
+//
+//  tx_buf[1] = ((SMOCIP_SEQ_TOTAL >> 4) & 0x03U) | ((seq_index & 0x3FU) << 2);
+//
+//  tx_buf[2] = smocip_payload[(seq_index * 6U) + 0];
+//  tx_buf[3] = smocip_payload[(seq_index * 6U) + 1];
+//  tx_buf[4] = smocip_payload[(seq_index * 6U) + 2];
+//  tx_buf[5] = smocip_payload[(seq_index * 6U) + 3];
+//  tx_buf[6] = smocip_payload[(seq_index * 6U) + 4];
+//  tx_buf[7] = smocip_payload[(seq_index * 6U) + 5];
+//
+//  canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
+//  canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
+//}
+void smocip_send(void)
 {
-  uint8_t tx_buf[8] = {0};
+    smocip_build_payload();
 
-  tx_buf[0] = (SMOCIP_PKT_TYPE & 0x0FU) | ((SMOCIP_SEQ_TOTAL << 4) & 0xF0U);
-
-  tx_buf[1] = ((SMOCIP_SEQ_TOTAL >> 4) & 0x03U) | ((seq_index & 0x3FU) << 2);
-
-  tx_buf[2] = smocip_payload[(seq_index * 6U) + 0];
-  tx_buf[3] = smocip_payload[(seq_index * 6U) + 1];
-  tx_buf[4] = smocip_payload[(seq_index * 6U) + 2];
-  tx_buf[5] = smocip_payload[(seq_index * 6U) + 3];
-  tx_buf[6] = smocip_payload[(seq_index * 6U) + 4];
-  tx_buf[7] = smocip_payload[(seq_index * 6U) + 5];
-
-  canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
-  canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
+    smocip_transaction_start(SMOCIP_PKT_TYPE, smocip_payload, SMOCIP_MAX_PAYLOAD_LEN);
 }
 
 void smocip_rx_handle(uint8_t *data, can_source_t can_source)
@@ -208,23 +520,20 @@ void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data)
     uint8_t action_type;
     uint8_t ack_status;
 
-    /* Byte 0-1 : ACK_CAN_ID */
     ack_can_id = ((uint16_t)data[0] << 8) |
                  (uint16_t)data[1];
 
-    /* ACK must belong to SMOCIP */
     if (ack_can_id != SMOCIP_TX_CAN_ID)
     {
         return;
     }
 
-    /* Byte 2 : ACTION_TYPE */
     action_type = data[2];
-
-    /* Byte 3 : ACK_STATUS */
     ack_status = data[3];
 
-    smocip_ack_received = 1U;
+    smocip_ack_received_flag = 1U;
     smocip_ack_action   = action_type;
     smocip_ack_status   = ack_status;
+
+    smocip_ack_received(ack_status);
 }

@@ -70,7 +70,7 @@ extern volatile uint32_t second_reference_tick;
 uint32_t get_timer_tick(void);
 uint32_t get_elapsed_ms(void);
 
-//extern volatile uint8_t  rti_tick_flag;
+extern volatile uint32_t system_ms;
 extern volatile uint8_t  rti_1s_tick_flag;
 
 volatile uint32_t rti_tick_flag;

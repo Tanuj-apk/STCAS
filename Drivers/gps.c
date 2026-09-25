@@ -21,9 +21,10 @@
 
 #define RX_BUF_SIZE     256
 
+volatile uint32_t system_ms;
 /* ----- Fallback Time Management ----- */
 volatile uint8_t  fallback_active      = 0;
-//volatile uint8_t  rti_tick_flag     = 0;
+
 volatile uint32_t seconds_in_fallback  = 0;
 volatile uint8_t  rti_1s_tick_flag       = 0;
 
@@ -790,6 +791,7 @@ void rtiNotification(uint32 notification)
     if (notification == rtiNOTIFICATION_COMPARE1)
     {
         rti_tick_flag++; //every 1 ms
+        system_ms++;
 
         rti_1ms_tick_flag = 1;
         seconds_uptime_1ms++; // global uptime every 1ms

@@ -23,6 +23,37 @@ uint8_t payload[RADIO_RX_MAX_PAYLOAD];
 extern uint32_t last_osma_rx_time;
 extern uint8_t osma_active;
 
+/* ================= PROTOCOL LIMITS ================= */
+
+#define RADIO_MAX_FRAGMENTS 64U
+#define RADIO_PAYLOAD_BYTES 6U
+#define RADIO_MAX_PAYLOAD_LEN 128 * 11 // 1 byte Sequence Total with 5.5 bytes payload per sequence
+#define RADIO_CRC_SIZE 4U
+
+#define RADIO_TRANSACTION_QUEUE_SIZE 8U
+#define RADIO_ACK_TIMEOUT_MS    100U
+#define RADIO_ACK_MAX_RETRIES   3U
+
+typedef struct
+{
+    uint8_t  active;
+
+    radio_id_t radio_id;
+
+    uint8_t  pkt_type;
+
+    uint8_t  payload_len;
+    uint8_t  payload[RADIO_MAX_PAYLOAD_LEN];
+
+    uint8_t  seq_total;
+    uint8_t  seq_index;
+
+    uint8_t  retry_count;
+
+    uint32_t start_time;
+
+} radio_ack_transaction_t;
+
 /* ================= API ================= */
 
 /* Send Access Request Packet (ARP) */
@@ -34,13 +65,6 @@ void radio_poll_1s(void);
 
 #define RADIO_AAP_RX_BASE_ID   0x0142U
 #define RADIO_AAP_RX_MASK      0x000007FEU   /* accepts 0x142 & 0x143 */
-
-/* ================= PROTOCOL LIMITS ================= */
-
-#define RADIO_MAX_FRAGMENTS    64U
-#define RADIO_PAYLOAD_BYTES    6U
-#define RADIO_MAX_PAYLOAD_LEN  128 * 11   //1 byte Sequence Total with 5.5 bytes payload per sequence
-#define RADIO_CRC_SIZE 4U
 
 /* ============================================================
  *  RADIO CAN IDs
@@ -317,5 +341,10 @@ void radio_update_frame_number(void);
 void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_total, uint8_t seq_index);
 
 void radio_ack_rx_handle(uint32_t can_id, uint8_t *data);
+
+radio_ack_transaction_t *radio_get_transaction(radio_id_t radio_id);
+void radio_transaction_send_next_fragment(radio_ack_transaction_t *transaction);
+void radio_ack_process(void);
+void radio_tx_process(void);
 
 #endif /* RADIO_H */
