@@ -74,6 +74,7 @@
 #include "SMOCIP.h"
 #include "spi.h"
 #include "hcms3902.h"
+#include "NMS.h"
 //#include "BIUController.h"
 /* USER CODE END */
 
@@ -303,6 +304,8 @@ void v_5msTasks(void)
     radio_tx_process();
     smocip_ack_process();
     smocip_tx_process();
+    nms_ack_process();
+    nms_tx_process();
     //    output_card_set_bit(OUT_EMERGENCY_BRAKE_1);
     //    output_card_set_bit(OUT_EMERGENCY_BRAKE_2);
     //    output_card_set_bit(OUT_HORN);
