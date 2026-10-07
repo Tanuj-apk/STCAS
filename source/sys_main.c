@@ -107,6 +107,10 @@ uint32_t calculate_firmware_crc(void);
 uint8_t reverse_timeout_flag = 0;
 //Test Variables
 //uint8_t BIU_Test = 1;
+#define NMS_TEST_ENABLE       1U
+#define NMS_TEST_PERIOD_SEC   5U
+
+static uint8_t nms_test_timer = 0U;
 
 #define FIRMWARE_CRC_START 0x00000000UL
 #define FIRMWARE_CRC_END 0x0002383FUL
@@ -430,6 +434,18 @@ void v_100msTasks(void)
 
 void v_1sTasks(void)
 {
+    #if NMS_TEST_ENABLE
+
+    nms_test_timer++;
+
+    if (nms_test_timer >= NMS_TEST_PERIOD_SEC)
+    {
+        nms_test_timer = 0U;
+
+        send_loco_postion_info_to_nms(1);
+    }
+
+    #endif
     //! ========For testing CPU ACK=========
     uint16_t a = 0x160U;
     send_cpu_universal_ack(a, 0, CPU_ACK_OK);
