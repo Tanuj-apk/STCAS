@@ -70,6 +70,7 @@
 #include "sci.h"
 #include "sys_common.h"
 #include "system.h"
+#include "het.h"
 #include "input_card.h"
 #include "SMOCIP.h"
 #include "spi.h"
@@ -87,6 +88,7 @@
 */
 
 /* USER CODE BEGIN (2) */
+uint8_t g_device_id;
 extern volatile uint8_t rx_byte;
 int count = 0;
 int frames_of_arp = 0;
@@ -254,12 +256,29 @@ uint32_t calculate_firmware_crc(void)
 //    g_previous = g_current;
 //    g_current = next;
 //}
+void Read_CPU_Device_ID(void)
+{
+    uint8_t a3;
+    uint8_t a4;
 
+    a3 = gioGetBit(gioPORTA, 3U);
+    a4 = gioGetBit(gioPORTA, 4U);
+
+    a3 = 0;
+    a4 = 1;
+
+    g_device_id = (uint8_t)(((a4 << 1U) | a3) + 1U);
+}
 void KavachInit(void)
 {
     uint8_t msg[] = "CPU GPS1+GPS2 RX Ready\r\n";
 
     systemInit();
+    gioInit();
+    Read_CPU_Device_ID();
+    gioSetBit(gioPORTA, 0, 0); // RS485 Receive Mode
+    hetPORT1->DIR |= (1U << 24);
+    gioSetBit(hetPORT1, 24, 0); // RS485 Receive Mode
     sciInit();
     i2cInit();
     _enable_IRQ();
