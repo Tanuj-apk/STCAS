@@ -24,6 +24,7 @@
 /* ============================================================
  *  RX BUFFERS
  * ============================================================ */
+ extern uint8_t g_device_id;
 static uint8_t rx_data_startup[8];
 static uint8_t rx_data_heartbeat[8];
 static uint8_t rx_data_rfid[8];
@@ -418,6 +419,65 @@ void canMessageNotification(canBASE_t *node, uint32_t messageBox)
 
       can_if_process_rx(rx_id, rx_ack_nms, can_source);
     }
+}
+
+
+void can_configure_device_ids(void) 
+{
+  uint32_t offset;
+
+  /* CPU1 -> 0, CPU2 -> 1, CPU3 -> 2, CPU4 -> 3 */
+  offset = (uint32_t)(g_device_id - 1U);
+
+  /* CPU_TIME_STS: MB1 */
+  canUpdateID(canREG1, canMESSAGE_BOX1, 0x60000000U | (0x100U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX1, 0x60000000U | (0x100U + offset));
+
+  /* CPU_STARTUP: MB2 */
+  canUpdateID(canREG1, canMESSAGE_BOX2, 0x60000000U | (0x080U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX2, 0x60000000U | (0x080U + offset));
+
+  /* CPU_HEARTBEAT: MB4 */
+  canUpdateID(canREG1, canMESSAGE_BOX4, 0x60000000U | (0x110U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX4, 0x60000000U | (0x110U + offset));
+
+  /* KMS AUTH_KEY_QUERY_MSG: MB7 */
+  canUpdateID(canREG1, canMESSAGE_BOX7, 0x60000000U | (0x130U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX7, 0x60000000U | (0x130U + offset));
+
+  /* CPU_UNIVERSAL_ACK: MB9 */
+  canUpdateID(canREG1, canMESSAGE_BOX9, 0x60000000U | (0x160U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX9, 0x60000000U | (0x160U + offset));
+
+  /* RADIO 1 TX: MB12 */
+  canUpdateID(canREG1, canMESSAGE_BOX12, 0x60000000U | (0x140U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX12, 0x60000000U | (0x140U + offset));
+
+  /* RADIO 2 TX: MB13 */
+  canUpdateID(canREG1, canMESSAGE_BOX13, 0x60000000U | (0x144U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX13, 0x60000000U | (0x144U + offset));
+
+  /* DATALOGGER: MB16 */
+  canUpdateID(canREG1, canMESSAGE_BOX16, 0x60000000U | (0x210U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX16, 0x60000000U | (0x210U + offset));
+
+  /* NMS: MB20 */
+  canUpdateID(canREG1, canMESSAGE_BOX20, 0x60000000U | (0x220U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX20, 0x60000000U | (0x220U + offset));
+  
+  /* SMOCIP: MB21 */
+  canUpdateID(canREG1, canMESSAGE_BOX21, 0x60000000U | (0x230U + offset));
+
+  canUpdateID(canREG2, canMESSAGE_BOX21, 0x60000000U | (0x230U + offset));
 }
 
 /* ============================================================
