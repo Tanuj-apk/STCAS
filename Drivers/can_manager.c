@@ -1,14 +1,13 @@
 #include "can_if.h"
 #include "gps.h"
 #include "rti.h"
-#include "gsm_rx.h"
-//#include "StateMachine.h"
+#include "kms.h"
+#include "input_card.h"
 
 /* ============================================================
  *  CONFIG
  * ============================================================ */
 #define STARTUP_ACK_TIMEOUT_SEC   5U
-#define DEV_COUNT 8U
 
 /* ============================================================
  *  STARTUP ACK TRACKING
@@ -35,49 +34,110 @@ uint8_t hb_mandatory_missing;
  * ============================================================ */
 typedef struct
 {
-    uint8_t     index;
     uint32_t    startup_ack_id;
     uint32_t    hb_ack_id;
     const char *name;
     uint8_t     mandatory;
-    uint8_t     dev_index;
+    uint8_t     input_card_number;
 } can_device_t;
 
-static const can_device_t can_devices[] =
+typedef enum
 {
-    { 0, 0x81U, 0x0C1U, "RADIO1",       1U , 0},
-    { 1, 0x82U, 0x0C2U, "RADIO2",       1U , 0},
+    CAN_DEV_RADIO1 = 0,
+    CAN_DEV_RADIO2,
+    CAN_DEV_EI1,
+    CAN_DEV_EI2,
+    CAN_DEV_DATA_LOGGER,
+    CAN_DEV_NMS,
+    CAN_DEV_KMS,
+    CAN_DEV_ADJ_STCAS1,
+    CAN_DEV_ADJ_STCAS2,
+    CAN_DEV_INPUT_CARD1,
+    CAN_DEV_INPUT_CARD2,
+    CAN_DEV_RIU,
+    CAN_DEV_SMOCIP,
+    CAN_DEV_INPUT_CARD3,
+    CAN_DEV_INPUT_CARD4,
+    CAN_DEV_INPUT_CARD5,
+    CAN_DEV_INPUT_CARD6,
+    CAN_DEV_INPUT_CARD7,
+    CAN_DEV_INPUT_CARD8,
+    CAN_DEV_INPUT_CARD9,
+    CAN_DEV_INPUT_CARD10,
+    CAN_DEV_INPUT_CARD11,
+    CAN_DEV_INPUT_CARD12,
+    CAN_DEV_INPUT_CARD13,
+    CAN_DEV_INPUT_CARD14,
+    CAN_DEV_INPUT_CARD15,
+    CAN_DEV_INPUT_CARD16,
+    CAN_DEVICE_COUNT
+} can_device_index_t;
 
-    { 2, 0x83U, 0x0C3U, "EI1",          1U , 1},
-    { 3, 0x84U, 0x0C4U, "EI2",          1U , 1},
+static const can_device_t can_devices[CAN_DEVICE_COUNT] =
+{
+    {0x84U, 0x0C1U, "RADIO1",      1U,  0U},
+    {0x85U, 0x0C2U, "RADIO2",      1U,  0U},
 
-    { 4, 0x85U, 0x0C5U, "DATA LOGGER",  1U , 2},
+    {0x86U, 0x0C3U, "EI1",         1U,  0U},
+    {0x87U, 0x0C4U, "EI2",         1U,  0U},
 
-    { 5, 0x86U, 0x0C6U, "NMS",          1U , 3},
-    { 6, 0x87U, 0x0C7U, "KMS",          1U , 3},
+    {0x88U, 0x0C5U, "DATA LOGGER", 1U,  0U},
 
-    { 7, 0x88U, 0x0C8U, "ADJ STCAS1",   1U , 4},
-    { 8, 0x89U, 0x0C9U, "ADJ STCAS2",   1U , 4},
+    {0x89U, 0x0C6U, "NMS",         1U,  0U},
+    {0x8AU, 0x0C7U, "KMS",         1U,  0U},
 
-    { 9, 0x8AU, 0x0CAU, "INPUT CARD1",  1U , 5},
-    {10, 0x8BU, 0x0CBU, "INPUT CARD2",  1U , 5},
+    {0x8BU, 0x0C8U, "ADJ STCAS1",  1U,  0U},
+    {0x8CU, 0x0C9U, "ADJ STCAS2",  1U,  0U},
 
-    {11, 0x8CU, 0x0CCU, "RIU",          1U , 6},
+    {0x8DU, 0x0CAU, "INPUT CARD1", 1U,  1U},
+    {0x8EU, 0x0CBU, "INPUT CARD2", 1U,  2U},
 
-    {12, 0x8DU, 0x0CDU, "SMOCIP",       1U , 7},
+    {0x8FU, 0x0CCU, "RIU",         1U,  0U},
 
-    {13, 0x8EU, 0x0CEU, "INPUT CARD3",  1U , 5},
+    {0x90U, 0x0CDU, "SMOCIP",      1U,  0U},
 
+    {0x91U, 0x0CEU, "INPUT CARD3", 1U,  3U},
+    {0x92U, 0x0CFU, "INPUT CARD4", 1U,  4U},
+    {0x93U, 0x0D0U, "INPUT CARD5", 1U,  5U},
+    {0x94U, 0x0D1U, "INPUT CARD6", 1U,  6U},
+    {0x95U, 0x0D2U, "INPUT CARD7", 1U,  7U},
+    {0x96U, 0x0D3U, "INPUT CARD8", 1U,  8U},
+    {0x97U, 0x0D4U, "INPUT CARD9", 1U,  9U},
+    {0x98U, 0x0D5U, "INPUT CARD10", 1U, 10U},
+    {0x99U, 0x0D6U, "INPUT CARD11", 1U, 11U},
+    {0x9AU, 0x0D7U, "INPUT CARD12", 1U, 12U},
+    {0x9BU, 0x0D8U, "INPUT CARD13", 1U, 13U},
+    {0x9CU, 0x0D9U, "INPUT CARD14", 1U, 14U},
+    {0x9DU, 0x0DAU, "INPUT CARD15", 1U, 15U},
+    {0x9EU, 0x0DBU, "INPUT CARD16", 1U, 16U}
 };
 
-uint8_t dev_count[DEV_COUNT];
+static const uint8_t input_card_device_indices[INPUT_CARD_MAX_COUNT] =
+{
+    CAN_DEV_INPUT_CARD1,  CAN_DEV_INPUT_CARD2,
+    CAN_DEV_INPUT_CARD3,  CAN_DEV_INPUT_CARD4,
+    CAN_DEV_INPUT_CARD5,  CAN_DEV_INPUT_CARD6,
+    CAN_DEV_INPUT_CARD7,  CAN_DEV_INPUT_CARD8,
+    CAN_DEV_INPUT_CARD9,  CAN_DEV_INPUT_CARD10,
+    CAN_DEV_INPUT_CARD11, CAN_DEV_INPUT_CARD12,
+    CAN_DEV_INPUT_CARD13, CAN_DEV_INPUT_CARD14,
+    CAN_DEV_INPUT_CARD15, CAN_DEV_INPUT_CARD16
+};
 
-// uint8_t device_count[10];
 uint8_t system_faulty_flag;
 
-#define NUM_CAN_DEVICES (sizeof(can_devices) / sizeof(can_devices[0]))
+#define NUM_CAN_DEVICES ((uint8_t)CAN_DEVICE_COUNT)
 uint8_t  hb_ack_bitmap[NUM_CAN_DEVICES];
 uint8_t  ack_bitmap[NUM_CAN_DEVICES];
+
+static uint8_t can_device_is_active(uint8_t device_index)
+{
+    uint8_t input_card_number;
+
+    input_card_number = can_devices[device_index].input_card_number;
+    return (uint8_t)((input_card_number == 0U) ||
+                     (input_card_number <= STCAS_INPUT_CARD_COUNT));
+}
 
 volatile uint32_t gps1_firmware_checksum = 0U;
 volatile uint32_t gps2_firmware_checksum = 0U;
@@ -138,8 +198,10 @@ static void update_card_checksums(void)
     uint8_t card1_data[16];
     uint8_t card2_data[16];
     uint8_t mvi_data[16];
-    uint8_t input_card_data[12]; //! Depends
-//    uint8_t riu_data[4];
+    uint8_t input_checksum_data[INPUT_CARD_MAX_COUNT * 4U];
+    uint8_t input_cards_ready;
+    uint8_t input_card_index;
+    uint8_t device_index;
 
     uint32_t radio1_checksum;
     uint32_t radio2_checksum;
@@ -153,37 +215,34 @@ static void update_card_checksums(void)
     uint32_t nms_checksum;
     uint32_t kms_checksum;
 
-    uint32_t input_card1_checksum;
-    uint32_t input_card2_checksum;
-    uint32_t input_card3_checksum;
-
-//    uint32_t riu_checksum;
-
     /* ========================================================
      * PERIPHERAL CHECKSUMS
      * ======================================================== */
 
-    radio1_checksum = peripheral_firmware_checksum[0];
-    radio2_checksum = peripheral_firmware_checksum[1];
+    radio1_checksum = peripheral_firmware_checksum[CAN_DEV_RADIO1];
+    radio2_checksum = peripheral_firmware_checksum[CAN_DEV_RADIO2];
 
-    ei1_checksum = peripheral_firmware_checksum[2];
-    ei2_checksum = peripheral_firmware_checksum[3];
+    ei1_checksum = peripheral_firmware_checksum[CAN_DEV_EI1];
+    ei2_checksum = peripheral_firmware_checksum[CAN_DEV_EI2];
 
-    datalogger_checksum = peripheral_firmware_checksum[4];
+    datalogger_checksum =
+        peripheral_firmware_checksum[CAN_DEV_DATA_LOGGER];
 
-    nms_checksum = peripheral_firmware_checksum[5];
-    kms_checksum = peripheral_firmware_checksum[6];
+    nms_checksum = peripheral_firmware_checksum[CAN_DEV_NMS];
+    kms_checksum = peripheral_firmware_checksum[CAN_DEV_KMS];
 
-    adjstcas1_checksum = peripheral_firmware_checksum[7];
-    adjstcas2_checksum = peripheral_firmware_checksum[8];
+    adjstcas1_checksum =
+        peripheral_firmware_checksum[CAN_DEV_ADJ_STCAS1];
+    adjstcas2_checksum =
+        peripheral_firmware_checksum[CAN_DEV_ADJ_STCAS2];
 
-    input_card1_checksum = peripheral_firmware_checksum[9];
-    input_card2_checksum = peripheral_firmware_checksum[10];
-    input_card3_checksum = peripheral_firmware_checksum[13];
+    smocip_checksum = peripheral_firmware_checksum[CAN_DEV_SMOCIP];
 
-    riu_checksum = peripheral_firmware_checksum[11];
-
-    smocip_checksum = peripheral_firmware_checksum[12];
+    comm_card1_checksum = 0U;
+    comm_card2_checksum = 0U;
+    mvi_card_checksum = 0U;
+    input_card_checksum = 0U;
+    riu_checksum = 0U;
 
     /* ========================================================
      * COMM CARD 1
@@ -191,7 +250,8 @@ static void update_card_checksums(void)
      * RADIO1 -> GPS1 -> EI1 -> ADJ STCAS1
      * ======================================================== */
 
-    if (ack_bitmap[0] && gps1_checksum_valid && ack_bitmap[2] && ack_bitmap[7])
+    if (ack_bitmap[CAN_DEV_RADIO1] && gps1_checksum_valid &&
+        ack_bitmap[CAN_DEV_EI1] && ack_bitmap[CAN_DEV_ADJ_STCAS1])
     {
         checksum32_to_bytes(radio1_checksum, card1_data + 0);
 
@@ -210,7 +270,8 @@ static void update_card_checksums(void)
      * RADIO2 -> GPS2 -> EI2 -> ADJ STCAS2
      * ======================================================== */
 
-    if (ack_bitmap[1] && gps2_checksum_valid && ack_bitmap[3] && ack_bitmap[8])
+    if (ack_bitmap[CAN_DEV_RADIO2] && gps2_checksum_valid &&
+        ack_bitmap[CAN_DEV_EI2] && ack_bitmap[CAN_DEV_ADJ_STCAS2])
     {
         checksum32_to_bytes(radio2_checksum, card2_data + 0);
 
@@ -229,7 +290,8 @@ static void update_card_checksums(void)
      * DATA LOGGER -> NMS -> KMS -> SMOCIP
      * ======================================================== */
 
-    if (ack_bitmap[4] && ack_bitmap[5] && ack_bitmap[6] && ack_bitmap[12])
+    if (ack_bitmap[CAN_DEV_DATA_LOGGER] && ack_bitmap[CAN_DEV_NMS] &&
+        ack_bitmap[CAN_DEV_KMS] && ack_bitmap[CAN_DEV_SMOCIP])
     {
         checksum32_to_bytes(datalogger_checksum, mvi_data + 0);
 
@@ -243,19 +305,32 @@ static void update_card_checksums(void)
     }
 
     /* ========================================================
-     * INPUT CARD
-     * INPUT CARD1 -> INPUT CARD2 -> INPUT CARD3
+     * INPUT CARDS
+     * CRC covers all cards configured for this station, in
+     * ascending card-number order.
      * ======================================================== */
-
-    if (ack_bitmap[9] && ack_bitmap[10] && ack_bitmap[13])
+    input_cards_ready = 1U;
+    for (input_card_index = 0U;
+         input_card_index < STCAS_INPUT_CARD_COUNT;
+         input_card_index++)
     {
-        checksum32_to_bytes(input_card1_checksum, input_card_data + 0);
+        device_index = input_card_device_indices[input_card_index];
+        if (ack_bitmap[device_index] == 0U)
+        {
+            input_cards_ready = 0U;
+            break;
+        }
 
-        checksum32_to_bytes(input_card2_checksum, input_card_data + 4);
+        checksum32_to_bytes(peripheral_firmware_checksum[device_index],
+                            input_checksum_data +
+                            ((uint16_t)input_card_index * 4U));
+    }
 
-        checksum32_to_bytes(input_card3_checksum, input_card_data + 8);
-
-        input_card_checksum = CRC32_Calculate(input_card_data, 12U);
+    if (input_cards_ready != 0U)
+    {
+        input_card_checksum =
+            CRC32_Calculate(input_checksum_data,
+                            (uint32_t)STCAS_INPUT_CARD_COUNT * 4U);
     }
 
     /* ========================================================
@@ -263,9 +338,9 @@ static void update_card_checksums(void)
      * Only one RIU is currently present
      * ======================================================== */
 
-    if (ack_bitmap[11])
+    if (ack_bitmap[CAN_DEV_RIU])
     {
-        riu_checksum = peripheral_firmware_checksum[11];
+        riu_checksum = peripheral_firmware_checksum[CAN_DEV_RIU];
     }
 }
 
@@ -281,9 +356,18 @@ void can_manager_init(void)
         hb_ack_bitmap[i] = 0U;
         peripheral_firmware_checksum[i] = 0U;
     }
-    send_cpu_startup_can();
+    ack_ok_mask = 0U;
+    ack_miss_mask = 0U;
+    hb_ok_mask = 0U;
+    hb_miss_mask = 0U;
+    mandatory_missing = 0U;
+    hb_mandatory_missing = 0U;
+    system_faulty_flag = 0U;
+    hb_in_progress = 0U;
+    last_hb_tx_time = seconds_uptime;
     startup_start_time   = seconds_uptime;
     startup_in_progress  = 1U;
+    send_cpu_startup_can();
 }
 
 /* ============================================================
@@ -299,10 +383,10 @@ void can_manager_handle_ack(uint32_t can_id, uint8_t *data)
     uint8_t i;
     for (i = 0U; i < NUM_CAN_DEVICES; i++)
     {
-        if (can_devices[i].startup_ack_id == can_id)
+        if ((can_device_is_active(i) != 0U) &&
+            (can_devices[i].startup_ack_id == can_id))
         {
-            ack_bitmap[can_devices[i].index] = 1U;
-            dev_count[can_devices[i].dev_index]++;
+            ack_bitmap[i] = 1U;
 
             /* Extract peripheral firmware checksum
              *
@@ -312,7 +396,11 @@ void can_manager_handle_ack(uint32_t can_id, uint8_t *data)
              * Byte 3 = CRC [15:8]
              * Byte 4 = CRC [7:0]
              */
-            peripheral_firmware_checksum[can_devices[i].index] = ((uint32_t)data[1] << 24) | ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 8) | (uint32_t)data[4];
+            peripheral_firmware_checksum[i] =
+                ((uint32_t)data[1] << 24) |
+                ((uint32_t)data[2] << 16) |
+                ((uint32_t)data[3] << 8) |
+                (uint32_t)data[4];
 
             break;
         }
@@ -327,10 +415,10 @@ void can_manager_handle_hb_ack(uint32_t can_id)
     uint8_t i;
     for (i = 0U; i < NUM_CAN_DEVICES; i++)
     {
-        if (can_devices[i].hb_ack_id == can_id)
+        if ((can_device_is_active(i) != 0U) &&
+            (can_devices[i].hb_ack_id == can_id))
         {
-            hb_ack_bitmap[can_devices[i].index] = 1U;
-            dev_count[can_devices[i].dev_index]++;
+            hb_ack_bitmap[i] = 1U;
             break;
         }
     }
@@ -347,22 +435,17 @@ void can_scheduler_1s_tick(void)
     /* ---- Heartbeat (every 5 seconds) ---- */
     if ((seconds_uptime - last_hb_tx_time) >= HEARTBEAT_PERIOD_SEC)
     {
-        for(i = 0; i < DEV_COUNT; i++)
-        {
-            dev_count[i] = 0;
-        }
-        send_cpu_heartbeat_can();
-        last_hb_tx_time = seconds_uptime;
         for (i = 0U; i < NUM_CAN_DEVICES; i++)
         {
             hb_ack_bitmap[i] = 0U;
         }
         hb_start_time  = seconds_uptime;
         hb_in_progress = 1U;
+        last_hb_tx_time = seconds_uptime;
+        send_cpu_heartbeat_can();
     }
-    /* ---- GSM FSM ---- */
-    gsm_start_poll_1s();
-    gsm_manager_process();
+    /* ---- KMS authentication transaction ---- */
+    kms_process_1s();
 }
 
 /* ============================================================
@@ -382,14 +465,18 @@ int can_manager_poll_startup(void)
             mandatory_missing = 0U;
             for (i = 0U; i < NUM_CAN_DEVICES; i++)
             {
-                uint8_t idx = can_devices[i].index;
-                if (ack_bitmap[idx])
+                if (can_device_is_active(i) == 0U)
                 {
-                    ack_ok_mask |= (1U << i);
+                    continue;
+                }
+
+                if (ack_bitmap[i])
+                {
+                    ack_ok_mask |= ((uint32_t)1U << i);
                 }
                 else
                 {
-                    ack_miss_mask |= (1U << i);
+                    ack_miss_mask |= ((uint32_t)1U << i);
                     if (can_devices[i].mandatory)
                     {
                         mandatory_missing = 1U;
@@ -398,32 +485,7 @@ int can_manager_poll_startup(void)
             }
             /* Calculate combined Card checksums */
             update_card_checksums();
-            for (i = 0; i < DEV_COUNT; i++)
-            {
-                if(i == 3)
-                {
-                    dev_count[i] = 0;
-                    continue;
-                }
-
-                if(dev_count[i] == 0)
-                {
-                    system_faulty_flag = 1;
-                }
-
-                dev_count[i] = 0;
-            }
-//            if(system_faulty_flag == 0)
-//            {
-//                input_write.raw_flags[0] &= ~(1U << 4);
-//                input_write.raw_flags[0] |= (1U << 5);
-//            }
-//            else
-//            {
-//                input_write.raw_flags[0] |= (1U << 4);
-//                input_write.raw_flags[0] &= ~(1U << 5);
-//            }
-//            system_faulty_flag = 0;
+            system_faulty_flag = mandatory_missing;
         }
         return 0;   /* startup not complete */
     }
@@ -439,44 +501,25 @@ int can_manager_poll_startup(void)
             hb_mandatory_missing = 0U;
             for (i = 0U; i < NUM_CAN_DEVICES; i++)
             {
-                uint8_t idx = can_devices[i].index;
-                if (hb_ack_bitmap[idx])
+                if (can_device_is_active(i) == 0U)
                 {
-                    hb_ok_mask |= (1U << i);
+                    continue;
+                }
+
+                if (hb_ack_bitmap[i])
+                {
+                    hb_ok_mask |= ((uint32_t)1U << i);
                 }
                 else
                 {
-                    hb_miss_mask |= (1U << i);
+                    hb_miss_mask |= ((uint32_t)1U << i);
                     if (can_devices[i].mandatory)
                     {
                         hb_mandatory_missing = 1U;
                     }
                 }
             }
-            for (i = 0; i < DEV_COUNT; i++)
-            {
-                if(i == 3)
-                {
-                    dev_count[i] = 0;
-                    continue;
-                }
-                if(dev_count[i] == 0)
-                {
-                    system_faulty_flag = 1;
-                }
-                dev_count[i] = 0;
-            }
-//            if(system_faulty_flag == 0)
-//            {
-//                input_write.raw_flags[0] &= ~(1U << 4);
-//                input_write.raw_flags[0] |= (1U << 5);
-//            }
-//            else
-//            {
-//                input_write.raw_flags[0] |= (1U << 4);
-//                input_write.raw_flags[0] &= ~(1U << 5);
-//            }
-//            system_faulty_flag = 0;
+            system_faulty_flag = hb_mandatory_missing;
         }
     }
 

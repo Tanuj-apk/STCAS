@@ -1,10 +1,7 @@
 
 
 #include "rfid_rx.h"
-#include "StateMachine.h"
-//#include "dmi_can.h"
 #include "gps.h"
-//#include "pulse_generator.h"
 #include "radio.h"
 #include "stdbool.h"
 #include <stdlib.h>

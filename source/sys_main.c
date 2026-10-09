@@ -50,20 +50,15 @@
 #include "sys_common.h"
 
 /* USER CODE BEGIN (1) */
-//#include <StateMachine.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "can.h"
 #include "can_if.h"
-//#include "counter_card.h"
-//#include "dmi_can.h"
 #include "gps.h"
-#include "gsm_rx.h"
+#include "kms.h"
 #include "i2c_UD.h"
-//#include "output_card.h"
-//#include "pulse_generator.h"
 #include "radio.h"
 //#include "rfid_rx.h"
 #include "rti.h"
@@ -76,7 +71,7 @@
 #include "spi.h"
 #include "hcms3902.h"
 #include "NMS.h"
-//#include "BIUController.h"
+#include "datalogging.h"
 /* USER CODE END */
 
 /** @fn void main(void)
@@ -88,27 +83,21 @@
 */
 
 /* USER CODE BEGIN (2) */
-uint8_t g_device_id;
 extern volatile uint8_t rx_byte;
-int count = 0;
-int frames_of_arp = 0;
 uint32_t calculated_firmware_checksum = 0U;
-uint8_t flagSet;
-uint8_t DataLogCheck = 0;
-uint8_t DataLogCount = 0;
+uint8_t g_device_id = CPU_DEVICE_ID_MIN;
 void v_1msTasks(void);
 void v_5msTasks(void);
 void v_10msTasks(void);
 void v_100msTasks(void);
 void v_1sTasks(void);
 void KavachInit(void);
-//void MainStateMachine(void);
-//void MasterStateChange(State_t next, cond_mask_t mask);
+static void Read_CPU_Device_ID(void);
+static bool DataLogger_CanTx(
+    uint32_t can_id,
+    const uint8_t data[DATA_LOGGER_CAN_FRAME_SIZE]);
 uint32_t calculate_firmware_crc(void);
-#define REVERSE_TIMEOUT_SEC   600U   // 10 minutes
-uint8_t reverse_timeout_flag = 0;
-//Test Variables
-//uint8_t BIU_Test = 1;
+
 #define NMS_TEST_ENABLE       1U
 #define NMS_TEST_PERIOD_SEC   5U
 
@@ -130,14 +119,18 @@ int main(void)
     HCMS_DisplayString(" OK ");
     while (1)
     {
-                if(!can_manager_poll_startup())
-                    continue;
+        /* Process received CAN frames outside interrupt context.  This must
+         * run before startup polling so queued startup ACKs are consumed. */
+        can_if_process_rx_pending();
+
+        if(!can_manager_poll_startup())
+            continue;
 
         gps_process();
 
         if (rti_1ms_tick_flag) 
         {
-//            v_1msTasks();
+           v_1msTasks();
             rti_1ms_tick_flag = 0;
         }
 
@@ -149,13 +142,13 @@ int main(void)
 
         if (rti_10ms_tick_flag)
         {
-            //            v_10msTasks();
+            // v_10msTasks();
             rti_10ms_tick_flag = 0;
         }
 
         if (rti_100ms_tick_flag)
         {
-//            v_100msTasks();
+           v_100msTasks();
             rti_100ms_tick_flag = 0;
         }
 
@@ -206,69 +199,33 @@ uint32_t calculate_firmware_crc(void)
     return ~crc;
 }
 
-//void MainStateMachine(void)
-//{
-//    // ? Take a clean, consistent snapshot of input_write
-//    input_swap();                    // atomic snapshot
-//
-//    cond_mask_t mask = compute_conditions();
-//    State_t next = fsm_step(g_current, mask);
-//    MasterStateChange(next, mask);
-//}
-
-//void MasterStateChange(State_t next, cond_mask_t mask)
-//{
-//    if((next != STATE_SB) && (g_current == STATE_SB))
-//    {
-//        input_write.raw_flags[0] &= ~(1U << 11); //New Train Formation
-//        input_write.raw_flags[0] &= ~(1U << 12); //No New Train Formation
-//        input_write.raw_flags[0] &= ~(1U << 13); //Train Config available
-//        input_write.raw_flags[0] &= ~(1U << 14); //Train Config not available
-//    }
-//    if((next != STATE_SR) && (g_current == STATE_SR))
-//    {
-//        input_write.raw_flags[1] &= ~(1U << 21); //Three Consecutive Normal Tags Missed
-//    }
-//    if((next != STATE_OS) && (g_current == STATE_OS))
-//    {
-//        input_write.raw_flags[1] &= ~(1U << 30); //
-//    }
-//    if((next != STATE_OV) && (g_current == STATE_OV))
-//    {
-//        input_write.raw_flags[1] &= ~(1U << 28); //
-//    }
-//    if((next != STATE_RV) && (g_current == STATE_RV))
-//    {
-//        reverse_timeout_flag = 0;
-//        input_write.raw_flags[1] &= ~(1U << 8);
-//        reverse_distance_flag = 0U;
-//    }
-//    if((next == STATE_RV) && (g_current != STATE_RV))
-//    {
-//        reverse_start_time = seconds_uptime;
-//    }
-//    if((next == STATE_SF) && (g_current != STATE_SF))
-//    {
-//        input_write.raw_flags[0] &= ~(1U << 4);
-//        input_write.raw_flags[0] |= (1U << 5);
-//    }
-//
-//    g_previous = g_current;
-//    g_current = next;
-//}
-void Read_CPU_Device_ID(void)
+static void Read_CPU_Device_ID(void)
 {
-    uint8_t a3;
-    uint8_t a4;
+    uint8_t id_lsb;
+    uint8_t id_msb;
 
-    a3 = gioGetBit(gioPORTA, 3U);
-    a4 = gioGetBit(gioPORTA, 4U);
+    id_lsb = (uint8_t)gioGetBit(gioPORTA, 3U);
+    id_msb = (uint8_t)gioGetBit(gioPORTA, 4U);
 
-    a3 = 0;
-    a4 = 1;
+    id_lsb = 1;
+    id_msb = 0;
 
-    g_device_id = (uint8_t)(((a4 << 1U) | a3) + 1U);
+    g_device_id = (uint8_t)(((id_msb << 1U) | id_lsb) +
+                            CPU_DEVICE_ID_MIN);
 }
+
+static bool DataLogger_CanTx(
+    uint32_t can_id,
+    const uint8_t data[DATA_LOGGER_CAN_FRAME_SIZE])
+{
+    if (can_id != can_get_local_tx_id(DATA_LOGGER_TX_CAN_ID))
+    {
+        return false;
+    }
+
+    return (can_transmit_redundant(canMESSAGE_BOX16, data) != 0U);
+}
+
 void KavachInit(void)
 {
     uint8_t msg[] = "CPU GPS1+GPS2 RX Ready\r\n";
@@ -283,12 +240,10 @@ void KavachInit(void)
     i2cInit();
     _enable_IRQ();
     canInit();
+    can_configure_device_ids();
     canEnableErrorNotification(canREG1);
     canEnableErrorNotification(canREG2);
-//    DMI_init();
-//    eqep_speed_init();
     //LED STATUS INIT
-    gioInit();
     spiInit();
     HCMS_Init();
 
@@ -307,13 +262,12 @@ void KavachInit(void)
     sciReceive(GPS1_SCI, 1U, (uint8 *)&rx_byte);
     sciReceive(GPS2_SCI, 1U, (uint8 *)&rx_byte);
 
-//    fsm_init();
     can_manager_init();
+    data_logger_init(DataLogger_CanTx);
+    kms_init();
 
     start_rtc_write = 1;
 
-    //BIU Check
-//    BIU_Init();
 }
 
 void v_1msTasks(void)
@@ -323,27 +277,14 @@ void v_1msTasks(void)
 
 void v_5msTasks(void)
 {
+    data_logger_process_ack();
+    (void)data_logger_process_tx(1U);
     radio_ack_process();
     radio_tx_process();
     smocip_ack_process();
     smocip_tx_process();
     nms_ack_process();
     nms_tx_process();
-    //    output_card_set_bit(OUT_EMERGENCY_BRAKE_1);
-    //    output_card_set_bit(OUT_EMERGENCY_BRAKE_2);
-    //    output_card_set_bit(OUT_HORN);
-    //    output_card_send();
-//    if(radio_can_arp_transmit_flag)
-//    {
-//        radio_build_fragment(tx_buf, RADIO_PKT_TYPE_ARP, radio_ctx.seq_total, frames_of_arp);
-//        canTransmit(canREG1, tx_mb, tx_buf);
-//        canTransmit(canREG2, tx_mb, tx_buf);
-//        frames_of_arp += 1;
-//        if(frames_of_arp >= 5)
-//        {
-//            radio_can_arp_transmit_flag = 0;
-//        }
-//    }
 }
 
 void v_10msTasks(void)
@@ -413,24 +354,10 @@ void v_10msTasks(void)
         }
     }
 
-//    BIUStateMachine();
 }
 
 void v_100msTasks(void)
 {
-//    eqep_speed_update();
-    //    DMI_update(); //! Commented because code gets stuck in while CAN Tx check
-
-    if(!DataLogCheck)
-    {
-        if(DataLogCount < 3)
-        {
-            send_Data_Log(DataLogCount);
-            DataLogCount++;
-        }
-    }
-//    Target_Prune();
-//    MainStateMachine();
     // TODO: Update ref_odo and implement some way to find Normal tag from given array for next tags
 //    if(((int32_t)distance_m - (int32_t)ref_odo) >= (reg_type1.TLI_Packet_reg_type1.dist_nxt_rfid[rfid_Count] + (LOCATION_ACCURACY_WINDOW/2)))  //Assuming Location accuracy window is 100 meter.
 //    {
@@ -465,41 +392,9 @@ void v_1sTasks(void)
     }
 
     #endif
-    //! ========For testing CPU ACK=========
-    uint16_t a = 0x160U;
-    send_cpu_universal_ack(a, 0, CPU_ACK_OK);
-
-    //! ======== For testing SMOCIP Tx =========
-    static uint8_t smocip_test_count = 0U;
-
-    smocip_test_count++;
-
-    if (smocip_test_count >= 5U)
-    {
-        smocip_test_count = 0U;
-
-        smocip_test_data_init();
-
-        smocip_send();
-    }
-    //! ========================================
 
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;
-    count++;
-    //! ======================================
-    //    check_for_transmit_arp();
-    /* Only for testing
-    if(count >= 10)
-    {
-        gsm_start_request(GSM_1);
-        radio_send_aap(RADIO_ID_1);
-        radio_send_arp(RADIO_ID_1);
-        radio_send_reg_type1(RADIO_ID_1);
-        radio_send_reg_type2(RADIO_ID_1);
-        count = 0;
-    }
-     */
     // seconds_uptime++;   // already in your rtiNotification (okay to keep here
     // too if not)
     if (fallback_active)
@@ -585,70 +480,6 @@ void v_1sTasks(void)
     //        }
     //    }
 
-    //    counter_card_set_bit(COUNTER_SOS);
-    //    counter_card_set_bit(COUNTER_BRAKE);
-    //    counter_card_send();
-
-//    send_Counter_Change_req(flagSet);
-    flagSet++;
-    if(flagSet >= 32)
-    {
-        flagSet = 0;
-    }
-
-    if(DataLogCheck)
-    {
-        DataLogCount = 0;
-        DataLogCheck = 0;
-    }
-    else if(!DataLogCheck)
-    {
-        DataLogCheck = 1;
-    }
-    /* =========================================
-     * OSMA EXPIRY (Condition 89)
-     * ========================================= */
-//    if(osma_active)
-//    {
-//        if((seconds_uptime - last_osma_rx_time) >= OSMA_HOLD_TIME)
-//        {
-//            osma_active = 0;   // expiry
-//            input_write.raw_flags[1] |= (1U << 30);
-//        }
-//    }
-
-    /* =========================================
-     * OVERRIDE TIMEOUT CONDITION
-     * ========================================= */
-//    if(override_active)
-//    {
-//        if((seconds_uptime - override_start_time) >= OV_ACTIVE_TIME)
-//        {
-//            override_active = 0;
-//            input_write.raw_flags[1] |= (1U << 28);  // Override timeout condition
-//        }
-//    }
-
-    /* =========================================
-     * REVERSE MODE TIMEOUT
-     * ========================================= */
-//    if(g_current == STATE_RV)
-//    {
-//        if((seconds_uptime - reverse_start_time) >= REVERSE_TIMEOUT_SEC)
-//        {
-//            reverse_active = 0;
-//            reverse_timeout_flag = 1;  // Reverse timeout bit
-//            input_write.raw_flags[1] |= (1U << 8);  // Reverse condition
-//        }
-//    }
-    //BIU Test?
-//    if(BIU_Test)
-//    {
-//        BIU_Test = 0;
-//        Target_Set(0, TARGET_EOA, 12000U, 0U);
-//        Target_Set(1, TARGET_PSR, 8000U, 60U);
-//    }
-//    BrakeSupervisor();
 }
 
 /* USER CODE END */

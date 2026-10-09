@@ -1,17 +1,14 @@
 #include "radio.h"
-#include "StateMachine.h"
 #include "can.h"
 #include "can_if.h"
-//#include "dmi_can.h"
 #include "gps.h"
-//#include "pulse_generator.h"
 #include "rfid_rx.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
 static uint32_t radio_rx_can_id = 0;
-//! Hardcoded loco ID and prev_frame for testing Condition 24 in StateMachine.c
+//! Hardcoded ID and previous frame retained for radio testing.
 uint32_t g_my_stn_id = 0x12345; // hardcoded for testing
 uint16_t approaching_station_id = 0; //Updated in rfid.c
 //!==========================================================================
@@ -945,6 +942,7 @@ static void radio_pop_transaction(radio_id_t radio_id)
 void radio_transaction_send_next_fragment(radio_ack_transaction_t *transaction)
 {
     uint8_t can_frame[8];
+    uint8_t tx_status;
 
     if (transaction == NULL)
     {
@@ -965,15 +963,18 @@ void radio_transaction_send_next_fragment(radio_ack_transaction_t *transaction)
 
     if (transaction->radio_id == RADIO_ID_1)
     {
-        canTransmit(canREG1, RADIO1_TX_MB, can_frame);
-        canTransmit(canREG2, RADIO1_TX_MB, can_frame);
+        tx_status = can_transmit_redundant(RADIO1_TX_MB, can_frame);
     }
     else if (transaction->radio_id == RADIO_ID_2)
     {
-        canTransmit(canREG1, RADIO2_TX_MB, can_frame);
-        canTransmit(canREG2, RADIO2_TX_MB, can_frame);
+        tx_status = can_transmit_redundant(RADIO2_TX_MB, can_frame);
     }
     else
+    {
+        return;
+    }
+
+    if (tx_status == 0U)
     {
         return;
     }
@@ -1286,6 +1287,12 @@ void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
 
     if (can_id == RADIO1_ACK_CAN_ID)
     {
+        if (ack_can_id !=
+            (uint16_t)can_get_local_tx_id(RADIO1_TX_CAN_ID))
+        {
+            return;
+        }
+
         radio1_ack_received = 1U;
         radio1_ack_action   = action_type;
         radio1_ack_status   = ack_status;
@@ -1293,6 +1300,12 @@ void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
     }
     else if (can_id == RADIO2_ACK_CAN_ID)
     {
+        if (ack_can_id !=
+            (uint16_t)can_get_local_tx_id(RADIO2_TX_CAN_ID))
+        {
+            return;
+        }
+
         radio2_ack_received = 1U;
         radio2_ack_action   = action_type;
         radio2_ack_status   = ack_status;
@@ -1341,7 +1354,7 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
         return;
     }
 
-    if(radio_rx_ctx.received_mask & (1U << seq_index))
+    if(radio_rx_ctx.received_mask & (1ULL << seq_index))
         return;
 
     /* ===== FRAGMENT STORED COUNTER ===== */
@@ -1360,7 +1373,7 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
     if (seq_index >= 64)
         return;
 
-    radio_rx_ctx.received_mask |= (1U << seq_index);
+    radio_rx_ctx.received_mask |= (1ULL << seq_index);
 
     uint16_t new_len = offset + RADIO_PAYLOAD_BYTES;
     if (new_len > radio_rx_ctx.payload_len)
@@ -1496,19 +1509,11 @@ static uint8_t radio_build_aap_payload(uint8_t *buf)
 
 void radio_send_aap(radio_id_t radio_id)
 {
-    uint8_t can_frame[8];
     radio_ctx.payload_len = radio_build_aap_payload(radio_ctx.payload);
     radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-//    uint8_t i; // Loop runs 5 times (for 5 frames)
-//    for ( i = 0; i < radio_ctx.seq_total; i++)
-//    {
-//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AAP,radio_ctx.seq_total,i);
-//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//    }
     if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_AAP))
     {
         return;
@@ -1595,19 +1600,11 @@ static uint8_t radio_build_aep_payload(uint8_t *buf)
 
 void radio_send_aep(radio_id_t radio_id)
 {
-    uint8_t can_frame[8];
     radio_ctx.payload_len = radio_build_aep_payload(radio_ctx.payload);
     radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-//    uint8_t i; // Loop runs 5 times (for 5 frames)
-//    for ( i = 0; i < radio_ctx.seq_total; i++)
-//    {
-//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_AEP,radio_ctx.seq_total,i);
-//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//    }
     if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_AEP))
     {
         return;
@@ -2522,19 +2519,11 @@ static uint8_t radio_build_reg_type1_payload(uint8_t *buf)
 
 void radio_send_reg_type1(radio_id_t radio_id)
 {
-    uint8_t can_frame[8];
     radio_ctx.payload_len = radio_build_reg_type1_payload(radio_ctx.payload);
     radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-//    uint8_t i; // Loop runs 5 times (for 5 frames)
-//    for ( i = 0; i < radio_ctx.seq_total; i++)
-//    {
-//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE1,radio_ctx.seq_total,i);
-//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//    }
     if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_REG_TYPE1))
     {
         return;
@@ -2740,19 +2729,11 @@ static uint8_t radio_build_reg_type2_payload(uint8_t *buf)
 
 void radio_send_reg_type2(radio_id_t radio_id)
 {
-    uint8_t can_frame[8];
     radio_ctx.payload_len = radio_build_reg_type2_payload(radio_ctx.payload);
     radio_ctx.seq_total = (radio_ctx.payload_len + RADIO_PAYLOAD_BYTES - 1U) / RADIO_PAYLOAD_BYTES;
     if (radio_ctx.seq_total > RADIO_MAX_FRAGMENTS)
         return;
 
-//    uint8_t i; // Loop runs 5 times (for 5 frames)
-//    for ( i = 0; i < radio_ctx.seq_total; i++)
-//    {
-//        radio_build_fragment(can_frame,RADIO_PKT_TYPE_REG_TYPE2,radio_ctx.seq_total,i);
-//        canTransmit(canREG1, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//        canTransmit(canREG2, (radio_id == RADIO_ID_1) ? canMESSAGE_BOX12 : canMESSAGE_BOX13, can_frame);
-//    }
     if (!radio_ack_transaction_start(radio_id, RADIO_PKT_TYPE_REG_TYPE2))
     {
         return;

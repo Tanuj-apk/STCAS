@@ -590,8 +590,7 @@ static void nms_pop_transaction(void)
 static void nms_transaction_send_next_fragment(nms_ack_transaction_t *transaction)
 {
     uint8_t can_frame[8];
-    uint32_t sent_can1;
-    uint32_t sent_can2;
+    uint8_t tx_status;
 
     if ((transaction == NULL) ||
         (transaction->seq_index >= transaction->seq_total))
@@ -600,10 +599,9 @@ static void nms_transaction_send_next_fragment(nms_ack_transaction_t *transactio
     }
 
     nms_build_fragment(can_frame, transaction);
-    sent_can1 = canTransmit(canREG1, NMS_TX_MB, can_frame);
-    sent_can2 = canTransmit(canREG2, NMS_TX_MB, can_frame);
+    tx_status = can_transmit_redundant(NMS_TX_MB, can_frame);
 
-    if ((sent_can1 == 0U) && (sent_can2 == 0U))
+    if (tx_status == 0U)
     {
         return;
     }
@@ -785,7 +783,7 @@ void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
 
     /* Project-2-TMS570 compatible local ACK format. */
     ack_can_id = (uint16_t)(((uint16_t)data[0] << 8U) | data[1]);
-    if (ack_can_id == NMS_TX_CAN_ID)
+    if (ack_can_id == (uint16_t)can_get_local_tx_id(NMS_TX_CAN_ID))
     {
         nms_ack_action = data[2];
         nms_ack_status = data[3];

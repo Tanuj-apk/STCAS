@@ -20,6 +20,26 @@ typedef enum
 } can_source_t;
 
 /* ============================================================
+ *  CPU IDENTITY AND CPU-OWNED CAN IDS
+ * ============================================================ */
+#define CPU_DEVICE_ID_MIN         1U
+#define CPU_DEVICE_ID_MAX         4U
+
+#define CPU_STARTUP_CAN_ID        0x080U
+#define CPU_TIME_CAN_ID           0x100U
+
+extern uint8_t g_device_id;
+
+/* Bit mask returned by can_transmit_redundant(). */
+#define CAN_TX_ACCEPTED_CAN1      0x01U
+#define CAN_TX_ACCEPTED_CAN2      0x02U
+#define CAN_TX_ACCEPTED_BOTH      (CAN_TX_ACCEPTED_CAN1 | CAN_TX_ACCEPTED_CAN2)
+
+extern volatile uint32_t can1_tx_reject_count;
+extern volatile uint32_t can2_tx_reject_count;
+extern volatile uint32_t can_dual_tx_reject_count;
+
+/* ============================================================
  * CPU UNIVERSAL ACK STATUS
  * ============================================================ */
 #define CPU_ACK_OK 0x00U
@@ -28,7 +48,7 @@ typedef enum
 /* ============================================================
  *  STARTUP ACK RANGE
  * ============================================================ */
-#define PERIPH_ACK_BASE_ID        0x081U
+#define PERIPH_ACK_BASE_ID        0x084U
 #define PERIPH_ACK_MAX_ID         0x0B1U
 #define PERIPH_ACK_ID_MASK        0x07CU
 
@@ -55,23 +75,17 @@ typedef enum
  *  DATALOGGER ACK
  * ============================================================ */
 #define DATA_LOGGER_TX_CAN_ID 0x0210U
-#define DATA_LOGGER_ACK_CAN_ID 0x0211U
+#define DATA_LOGGER_ACK_CAN_ID 0x0214U
 
 
 /* ============================================================
- *  GSM CAN
+ *  KMS CAN
  * ============================================================ */
-#define GSM_START_REQ_CAN_ID      0x130U
-
-/* RX filter: accepts 0x131 and 0x132 */
-#define GSM_AUTH_KEY_RX_ID        0x130U
-#define GSM_AUTH_KEY_RX_MASK      0x7FCU
-
-#define MSG_TYPE_GSM_START_REQ    0x30U
-#define MSG_TYPE_GSM_AUTH_KEY     0x31U
-
-#define GSM_ACTION_START          0x01U
-#define GSM_ACTION_STOP           0x00U
+#define KMS_QUERY_TX_CAN_ID       0x130U
+#define KMS_RX_CAN_ID_1           0x134U
+#define KMS_RX_CAN_ID_2           0x135U
+#define KMS_RX_CAN_ID_BASE        KMS_RX_CAN_ID_1
+#define KMS_RX_CAN_ID_MASK        0x7FEU
 
 /* ============================================================
  *  INPUT CARD CAN
@@ -79,7 +93,7 @@ typedef enum
 
 /* RX filter: accepts 0x150 � 0x153 */
 #define INPUT_CARD_RX_ID     0x150U
-#define INPUT_CARD_RX_MASK   0x7FCU
+#define INPUT_CARD_RX_MASK   0x7F0U
 
 /* ============================================================
  *  CPU UNIVERSAL ACK
@@ -93,7 +107,7 @@ typedef enum
 typedef enum
 {
     PERIPH_RADIO      = 0x01,
-    PERIPH_GSM        = 0x02,
+    PERIPH_KMS        = 0x02,
     PERIPH_RFID       = 0x03,
     PERIPH_INPUT_CARD = 0x04
 } peripheral_id_t;
@@ -117,29 +131,46 @@ typedef enum
 
 void send_cpu_universal_ack(uint16_t peripheral_can_id, uint8_t action_type, uint8_t ack_status);
 
-typedef enum 
-{
-    GSM_1 = 0,
-    GSM_2 = 1
-} gsm_id_t;
 /* ================= RADIO CAN IDs ================= */
 
 #define RADIO1_CAN_ID        0x0140U
-#define RADIO2_CAN_ID        0x0141U
+#define RADIO2_CAN_ID        0x0144U
+
+/* ============================================================
+ *  CAN RX SOFTWARE QUEUE
+ * ============================================================ */
+#define CAN_RX_PROCESS_LIMIT  8U
+#define CAN_RX_QUEUE_SIZE    64U
+
+typedef struct
+{
+    uint32_t id;
+    can_source_t can_source;
+    uint8_t data[8];
+} can_rx_queue_entry_t;
+
+extern volatile can_rx_queue_entry_t can_rx_queue[CAN_RX_QUEUE_SIZE];
+extern volatile uint8_t can_rx_head;
+extern volatile uint8_t can_rx_tail;
+extern volatile uint32_t can_rx_queue_overflow;
+extern volatile uint32_t can_rx_message_lost;
+extern volatile uint32_t can_rx_read_failures;
 
 /* ============================================================
  *  CAN IF APIs
  * ============================================================ */
 
 /* TX */
+uint8_t can_transmit_redundant(uint32_t message_box, const uint8_t data[8]);
+uint32_t can_get_local_tx_id(uint32_t base_can_id);
+void can_configure_device_ids(void);
 void send_cpu_startup_can(void);
 void send_cpu_time_can(void);
 void send_cpu_heartbeat_can(void);
-void send_gsm_start_req(uint8_t gsm_id, uint8_t action);
-void send_Data_Log(uint8_t count);
 
 /* RX dispatch */
 void can_if_process_rx(uint32_t can_id, uint8_t *data, can_source_t can_source);
+void can_if_process_rx_pending(void);
 void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_source);
 
 /* CAN manager */
@@ -161,6 +192,4 @@ void can_request_event(can_msg_id_t msg);
 /* ============================================================
  *  TX BUFFERS
  * ============================================================ */
-extern uint8_t tx_data_log[18];
-
 #endif /* CAN_IF_H */

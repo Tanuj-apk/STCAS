@@ -1,7 +1,7 @@
 #include "input_card.h"
 #include <string.h>
 
-input_card_data_t input_card_data[INPUT_CARD_COUNT]; // Raw data received from Input Cards
+input_card_data_t input_card_data[INPUT_CARD_MAX_COUNT]; // Raw data received from Input Cards
 field_input_t
     field_inputs[FIELD_INPUT_COUNT]; // Current value of each field-input key,
                                      // will eventually store Key + Value
@@ -13,22 +13,15 @@ typedef struct {
   uint8_t valid;
 } input_card_can_frame_ctx_t;
 
-static input_card_can_frame_ctx_t input_card_can1[INPUT_CARD_COUNT];
-static input_card_can_frame_ctx_t input_card_can2[INPUT_CARD_COUNT];
+static input_card_can_frame_ctx_t input_card_can1[INPUT_CARD_MAX_COUNT];
+static input_card_can_frame_ctx_t input_card_can2[INPUT_CARD_MAX_COUNT];
 
 static uint8_t input_card_get_index(uint32_t can_id) 
 {
-    if (can_id == INPUT_CARD1_CAN_ID) 
+    if ((can_id >= INPUT_CARD_CAN_ID_BASE) &&
+        (can_id < (INPUT_CARD_CAN_ID_BASE + STCAS_INPUT_CARD_COUNT)))
     {
-        return 0U;
-    } 
-    else if (can_id == INPUT_CARD2_CAN_ID) 
-    {
-        return 1U;
-    } 
-    else if (can_id == INPUT_CARD3_CAN_ID) 
-    {
-        return 2U;
+        return (uint8_t)(can_id - INPUT_CARD_CAN_ID_BASE);
     }
 
     return 0xFFU;
@@ -148,7 +141,6 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
 {
     uint8_t index;
 
-    uint8_t pkt_type;
     uint8_t seq_total;
     uint8_t seq_index;
 
@@ -156,8 +148,6 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
     uint8_t card;
     uint8_t channel;
     uint16_t key;
-
-    pkt_type = data[0] & 0x0F;
 
     seq_total = ((data[0] >> 4) & 0x0F) | ((data[1] & 0x03) << 4);
 
@@ -219,9 +209,10 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         return;
     }
 
-    input_card_data[index].inputs =
+    inputs =
         ((uint32_t)data[2]) | ((uint32_t)data[3] << 8) |
         ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
+    input_card_data[index].inputs = inputs;
 
     send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
     
