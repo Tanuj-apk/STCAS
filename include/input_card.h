@@ -4,11 +4,20 @@
 #include <stdint.h>
 #include "can_if.h"
 
-#define INPUT_CARD1_CAN_ID 0x150U
-#define INPUT_CARD2_CAN_ID 0x151U
-#define INPUT_CARD3_CAN_ID 0x152U
+#define INPUT_CARD_CAN_ID_BASE 0x150U
+#define INPUT_CARD_MAX_COUNT   16U
 
-#define INPUT_CARD_COUNT 3U
+/* Station-specific build setting.  May also be supplied as a compiler
+ * definition without editing this file. */
+#ifndef STCAS_INPUT_CARD_COUNT
+#define STCAS_INPUT_CARD_COUNT 3U
+#endif
+
+#if ((STCAS_INPUT_CARD_COUNT < 1U) || \
+     (STCAS_INPUT_CARD_COUNT > INPUT_CARD_MAX_COUNT))
+#error "STCAS_INPUT_CARD_COUNT must be in the range 1..16"
+#endif
+
 #define INPUT_CARD_CHANNELS 32U
 
 #define INPUT_CARD_SEQ_TOTAL 1U
@@ -18,6 +27,8 @@ typedef struct
 {
   uint32_t inputs;
 } input_card_data_t;
+
+extern input_card_data_t input_card_data[INPUT_CARD_MAX_COUNT];
 
 #define FIELD_INPUT_COUNT 93U
 

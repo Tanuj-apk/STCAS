@@ -8,8 +8,8 @@
 #define SMOCIP_SEQ_TOTAL   0x05U
 
 #define SMOCIP_TX_CAN_ID    0x0230U
-#define SMOCIP_RX_ID        0x0231U
-#define SMOCIP_ACK_CAN_ID   0x0230U
+#define SMOCIP_RX_ID        0x0234U
+#define SMOCIP_ACK_CAN_ID   0x0234U
 
 #define ACK_ACTION_SMOCIP SMOCIP_PKT_TYPE
 typedef struct
@@ -73,8 +73,6 @@ void smocip_build_payload(void);
 void smocip_send(void);
 void smocip_ack_process(void);
 void smocip_tx_process(void);
-//! TEST
-void smocip_test_data_init(void);
 void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data);
 
 extern volatile uint32_t comm_card1_checksum;

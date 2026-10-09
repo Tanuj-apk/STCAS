@@ -5,7 +5,7 @@
 #include "can.h"
 
 #define NMS_TX_CAN_ID                    0x0220U
-#define NMS_ACK_CAN_ID                   0x0221U
+#define NMS_ACK_CAN_ID                   0x0224U
 #define NMS_TX_MB                        canMESSAGE_BOX20
 
 /* CAN envelope used between the TMS570 and the Ethernet gateway. */

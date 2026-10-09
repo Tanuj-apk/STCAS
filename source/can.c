@@ -373,22 +373,15 @@ void canInit(void)
     canREG1->IF2CMD  = (uint8) 0xF8U;
     canREG1->IF2NO   = 10U;
 
-    /** - Initialize message 11 
-    *     - Wait until IF1 is ready for use 
-    *     - Set message mask
-    *     - Set message control word
-    *     - Set message arbitration
-    *     - Set IF1 control byte
-    *     - Set IF1 message number
-    */
+    /** - Disable message 11 (locomotive output card; not used by STCAS) */
     /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
     while ((canREG1->IF1STAT & 0x80U) ==0x80U)
     { 
     } /* Wait */
 
-    canREG1->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x170U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG1->IF1MSK  = 0U;
+    canREG1->IF1ARB  = 0U;
+    canREG1->IF1MCTL = 0U;
     canREG1->IF1CMD  = (uint8) 0xF8U;
     canREG1->IF1NO   = 11U;
 
@@ -462,9 +455,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG1->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x200U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG1->IF1MSK  = 0U;
+    canREG1->IF1ARB  = 0U; /* Message 15: counter card disabled for STCAS. */
+    canREG1->IF1MCTL = 0U;
     canREG1->IF1CMD  = (uint8) 0xF8U;
     canREG1->IF1NO   = 15U;
 
@@ -500,9 +493,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG1->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x180U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG1->IF1MSK  = 0U;
+    canREG1->IF1ARB  = 0U; /* Message 17: DMI 1 disabled for STCAS. */
+    canREG1->IF1MCTL = 0U;
     canREG1->IF1CMD  = (uint8) 0xF8U;
     canREG1->IF1NO   = 17U;
 
@@ -519,9 +512,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG1->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x181U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF2MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG1->IF2MSK  = 0U;
+    canREG1->IF2ARB  = 0U; /* Message 18: DMI 2 disabled for STCAS. */
+    canREG1->IF2MCTL = 0U;
     canREG1->IF2CMD  = (uint8) 0xF8U;
     canREG1->IF2NO   = 18U;
 
@@ -538,9 +531,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG1->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x182U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000080U | (uint32)8U;
+    canREG1->IF1MSK  = 0U;
+    canREG1->IF1ARB  = 0U; /* Message 19: DMI receive disabled for STCAS. */
+    canREG1->IF1MCTL = 0U;
     canREG1->IF1CMD  = (uint8) 0xF8U;
     canREG1->IF1NO   = 19U;
 
@@ -614,9 +607,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG1->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x201U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG1->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG1->IF1MSK  = 0U;
+    canREG1->IF1ARB  = 0U; /* Message 23: counter-card receive disabled for STCAS. */
+    canREG1->IF1MCTL = 0U;
     canREG1->IF1CMD  = (uint8) 0xF8U;
     canREG1->IF1NO   = 23U;
 
@@ -863,7 +856,7 @@ void canInit(void)
     } /* Wait */
 
     canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007C0U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x081U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x084U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 3U;
@@ -957,8 +950,8 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007F8U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x130U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FEU & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x134U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF2CMD  = (uint8) 0xF8U;
     canREG2->IF2NO   = 8U;
@@ -995,28 +988,21 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FCU & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007F0U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x150U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF2CMD  = (uint8) 0xF8U;
     canREG2->IF2NO   = 10U;
 
-    /** - Initialize message 11 
-    *     - Wait until IF1 is ready for use 
-    *     - Set message mask
-    *     - Set message control word
-    *     - Set message arbitration
-    *     - Set IF1 control byte
-    *     - Set IF1 message number
-    */
+    /** - Disable message 11 (locomotive output card; not used by STCAS) */
     /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
     while ((canREG2->IF1STAT & 0x80U) ==0x80U)
     { 
     } /* Wait */
 
-    canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x170U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1MSK  = 0U;
+    canREG2->IF1ARB  = 0U;
+    canREG2->IF1MCTL = 0U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 11U;
 
@@ -1053,7 +1039,7 @@ void canInit(void)
     } /* Wait */
 
     canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x141U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x144U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 13U;
@@ -1072,7 +1058,7 @@ void canInit(void)
     } /* Wait */
 
     canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FEU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x142U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x148U & (uint32)0x1FFFFFFFU) << (uint32)0U);
     canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF2CMD  = (uint8) 0xF8U;
     canREG2->IF2NO   = 14U;
@@ -1090,9 +1076,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x200U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1MSK  = 0U;
+    canREG2->IF1ARB  = 0U; /* Message 15: counter card disabled for STCAS. */
+    canREG2->IF1MCTL = 0U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 15U;
 
@@ -1128,9 +1114,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x180U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1MSK  = 0U;
+    canREG2->IF1ARB  = 0U; /* Message 17: DMI 1 disabled for STCAS. */
+    canREG2->IF1MCTL = 0U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 17U;
 
@@ -1147,9 +1133,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x181U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF2MSK  = 0U;
+    canREG2->IF2ARB  = 0U; /* Message 18: DMI 2 disabled for STCAS. */
+    canREG2->IF2MCTL = 0U;
     canREG2->IF2CMD  = (uint8) 0xF8U;
     canREG2->IF2NO   = 18U;
 
@@ -1166,9 +1152,9 @@ void canInit(void)
     { 
     } /* Wait */
 
-    canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x182U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1MSK  = 0U;
+    canREG2->IF1ARB  = 0U; /* Message 19: DMI receive disabled for STCAS. */
+    canREG2->IF1MCTL = 0U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 19U;
 
@@ -1205,10 +1191,86 @@ void canInit(void)
     } /* Wait */
 
     canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x221U & (uint32)0x1FFFFFFFU) << (uint32)0U);
-    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x20000000U | (uint32)((uint32)((uint32)0x230U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
     canREG2->IF1CMD  = (uint8) 0xF8U;
     canREG2->IF1NO   = 21U;
+
+    /** - Initialize message 22 
+    *     - Wait until IF2 is ready for use 
+    *     - Set message mask
+    *     - Set message control word
+    *     - Set message arbitration
+    *     - Set IF2 control byte
+    *     - Set IF2 message number
+    */
+    /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
+    while ((canREG2->IF2STAT & 0x80U) ==0x80U)
+    { 
+    } /* Wait */
+
+    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x234U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF2CMD  = (uint8) 0xF8U;
+    canREG2->IF2NO   = 22U;
+
+    /** - Initialize message 23 
+    *     - Wait until IF1 is ready for use 
+    *     - Set message mask
+    *     - Set message control word
+    *     - Set message arbitration
+    *     - Set IF1 control byte
+    *     - Set IF1 message number
+    */
+    /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
+    while ((canREG2->IF1STAT & 0x80U) ==0x80U)
+    { 
+    } /* Wait */
+
+    canREG2->IF1MSK  = 0U;
+    canREG2->IF1ARB  = 0U; /* Message 23: counter-card receive disabled for STCAS. */
+    canREG2->IF1MCTL = 0U;
+    canREG2->IF1CMD  = (uint8) 0xF8U;
+    canREG2->IF1NO   = 23U;
+
+    /** - Initialize message 24 
+    *     - Wait until IF2 is ready for use 
+    *     - Set message mask
+    *     - Set message control word
+    *     - Set message arbitration
+    *     - Set IF2 control byte
+    *     - Set IF2 message number
+    */
+    /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
+    while ((canREG2->IF2STAT & 0x80U) ==0x80U)
+    { 
+    } /* Wait */
+
+    canREG2->IF2MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x214U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF2MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF2CMD  = (uint8) 0xF8U;
+    canREG2->IF2NO   = 24U;
+
+    /** - Initialize message 25 
+    *     - Wait until IF1 is ready for use 
+    *     - Set message mask
+    *     - Set message control word
+    *     - Set message arbitration
+    *     - Set IF1 control byte
+    *     - Set IF1 message number
+    */
+    /*SAFETYMCUSW 28 D MR:NA <APPROVED> "Potentially infinite loop found - Hardware Status check for execution sequence" */
+    while ((canREG2->IF1STAT & 0x80U) ==0x80U)
+    { 
+    } /* Wait */
+
+    canREG2->IF1MSK  = 0xC0000000U | (uint32)((uint32)((uint32)0x000007FFU & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF1ARB  = (uint32)0x80000000U | (uint32)0x40000000U | (uint32)0x00000000U | (uint32)((uint32)((uint32)0x224U & (uint32)0x1FFFFFFFU) << (uint32)0U);
+    canREG2->IF1MCTL = 0x00001000U | (uint32)0x00000400U | (uint32)0x00000000U | (uint32)0x00000000U | (uint32)8U;
+    canREG2->IF1CMD  = (uint8) 0xF8U;
+    canREG2->IF1NO   = 25U;
 
     /** - Setup IF1 for data transmission 
     *     - Wait until IF1 is ready for use 

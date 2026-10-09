@@ -42,7 +42,7 @@ typedef struct
 
     uint8_t  pkt_type;
 
-    uint8_t  payload_len;
+    uint16_t payload_len;
     uint8_t  payload[RADIO_MAX_PAYLOAD_LEN];
 
     uint8_t  seq_total;
@@ -63,20 +63,20 @@ void radio_send_arp(radio_id_t radio_id);
 void radio_poll_1s(void);
 /* ================= CAN DEFINES ================= */
 
-#define RADIO_AAP_RX_BASE_ID   0x0142U
-#define RADIO_AAP_RX_MASK      0x000007FEU   /* accepts 0x142 & 0x143 */
+#define RADIO_AAP_RX_BASE_ID   0x0148U
+#define RADIO_AAP_RX_MASK      0x000007FEU   /* accepts 0x148 & 0x149 */
 
 /* ============================================================
  *  RADIO CAN IDs
  * ============================================================ */
 
 #define RADIO1_TX_CAN_ID 0x0140U
-#define RADIO2_TX_CAN_ID 0x0141U
+#define RADIO2_TX_CAN_ID 0x0144U
 
-#define RADIO1_ACK_CAN_ID 0x0142U
-#define RADIO2_ACK_CAN_ID 0x0143U
+#define RADIO1_ACK_CAN_ID 0x0148U
+#define RADIO2_ACK_CAN_ID 0x0149U
 
-#define RADIO_ACK_RX_BASE_ID 0x0142U
+#define RADIO_ACK_RX_BASE_ID 0x0148U
 #define RADIO_ACK_RX_MASK 0x000007FEU
 
 /* ================= RX CONTEXT ================= */
@@ -87,7 +87,7 @@ typedef struct
     uint8_t  pkt_type;
     uint8_t  seq_total;
     uint64_t  received_mask;
-    uint8_t  payload_len;
+    uint16_t payload_len;
     uint8_t  payload[RADIO_MAX_PAYLOAD_LEN];
     uint32_t start_time;
 } radio_rx_ctx_t;
@@ -283,7 +283,7 @@ typedef struct
     uint8_t  active;
     uint8_t  seq_total;
     uint8_t  seq_index;
-    uint8_t  payload_len;
+    uint16_t payload_len;
     uint8_t  payload[RADIO_MAX_PAYLOAD_LEN];
 } radio_tx_ctx_t;
 

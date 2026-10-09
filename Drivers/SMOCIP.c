@@ -203,8 +203,10 @@ static void smocip_transaction_send_next_fragment(smocip_transaction_t *transact
     /*
      * Redundant transmission on CAN1 and CAN2.
      */
-    canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
-    canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
+    if (can_transmit_redundant(canMESSAGE_BOX21, tx_buf) == 0U)
+    {
+        return;
+    }
 
     transaction->seq_index++;
 
@@ -326,48 +328,6 @@ void smocip_tx_process(void)
     }
 }
 
-//! ============ TEST DATA ==================
-void smocip_test_data_init(void)
-{
-  /* Station ID = "12345" */
-  smocip_tx.station_id[0] = '1';
-  smocip_tx.station_id[1] = '2';
-  smocip_tx.station_id[2] = '3';
-  smocip_tx.station_id[3] = '4';
-  smocip_tx.station_id[4] = '5';
-
-  /* KMS Key Index = 0x1234 */
-  smocip_tx.kms_key_index = 0x1234U;
-
-  /* TSR Count = 0x0056 */
-  smocip_tx.tsr_count = 0x0056U;
-
-  /*
-   * Status:
-   *
-   * Bit 0 = SMOCIP
-   * Bit 1 = STN_SOS_GEN
-   * Bit 2 = SOS_CANCEL
-   * Bit 3 = SOS_ACK
-   *
-   * 0x0B = 1011
-   *
-   * SMOCIP       = 1
-   * STN_SOS_GEN  = 1
-   * SOS_CANCEL   = 0
-   * SOS_ACK      = 1
-   */
-  smocip_tx.status_byte = 0x0BU;
-
-  /* Application checksum = AA BB CC DD EE FF */
-  smocip_tx.comm_card1_checksum = comm_card1_checksum;
-  smocip_tx.comm_card2_checksum = comm_card2_checksum;
-  smocip_tx.mvi_card_checksum    = mvi_card_checksum;
-  smocip_tx.input_card_checksum  = input_card_checksum;
-  smocip_tx.riu_checksum         = riu_checksum;
-}
-//! =================================================
-
 void smocip_build_payload(void)
 {
     smocip_payload[0] = smocip_tx.station_id[0];
@@ -416,24 +376,6 @@ void smocip_build_payload(void)
     smocip_payload[30] = (uint8_t)(smocip_tx.riu_checksum);
 }
 
-//void smocip_send_can(uint8_t seq_index)
-//{
-//  uint8_t tx_buf[8] = {0};
-//
-//  tx_buf[0] = (SMOCIP_PKT_TYPE & 0x0FU) | ((SMOCIP_SEQ_TOTAL << 4) & 0xF0U);
-//
-//  tx_buf[1] = ((SMOCIP_SEQ_TOTAL >> 4) & 0x03U) | ((seq_index & 0x3FU) << 2);
-//
-//  tx_buf[2] = smocip_payload[(seq_index * 6U) + 0];
-//  tx_buf[3] = smocip_payload[(seq_index * 6U) + 1];
-//  tx_buf[4] = smocip_payload[(seq_index * 6U) + 2];
-//  tx_buf[5] = smocip_payload[(seq_index * 6U) + 3];
-//  tx_buf[6] = smocip_payload[(seq_index * 6U) + 4];
-//  tx_buf[7] = smocip_payload[(seq_index * 6U) + 5];
-//
-//  canTransmit(canREG1, canMESSAGE_BOX21, tx_buf);
-//  canTransmit(canREG2, canMESSAGE_BOX21, tx_buf);
-//}
 void smocip_send(void)
 {
     smocip_build_payload();
@@ -443,7 +385,6 @@ void smocip_send(void)
 
 void smocip_rx_handle(uint8_t *data, can_source_t can_source)
 {
-  uint8_t pkt_type;
   uint8_t seq_total;
   uint8_t seq_index;
 
@@ -484,13 +425,11 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
     return;
   }
 
-  pkt_type = data[0] & 0x0F;
-
   seq_total = ((data[1] & 0x03) << 4) | ((data[0] & 0xF0) >> 4);
 
   seq_index = (data[1] & 0xFC) >> 2;
 
-  if (seq_total != 0U)
+  if (seq_total != 1U)
     return;
 
   if (seq_index != 0U)
@@ -520,16 +459,27 @@ void smocip_ack_rx_handle(uint32_t can_id, uint8_t *data)
     uint8_t action_type;
     uint8_t ack_status;
 
+    if (can_id != SMOCIP_ACK_CAN_ID)
+    {
+        return;
+    }
+
     ack_can_id = ((uint16_t)data[0] << 8) |
                  (uint16_t)data[1];
 
-    if (ack_can_id != SMOCIP_TX_CAN_ID)
+    if (ack_can_id !=
+        (uint16_t)can_get_local_tx_id(SMOCIP_TX_CAN_ID))
     {
         return;
     }
 
     action_type = data[2];
     ack_status = data[3];
+
+    if (action_type != ACK_ACTION_SMOCIP)
+    {
+        return;
+    }
 
     smocip_ack_received_flag = 1U;
     smocip_ack_action   = action_type;
