@@ -347,4 +347,7 @@ void send_skavach_fault_msg_to_nms(uint8_t unused_frame_num);
 void send_loco_rssi_msg_to_nms(uint8_t unused_frame_num);
 void send_skavach_rssi_msg_to_nms(uint8_t unused_frame_num);
 
+void nms_init_position_test_data(void);
+void nms_init_tsr_test_data(void);
+void nms_init_health_test_data(void);
 #endif
