@@ -266,6 +266,10 @@ void KavachInit(void)
     data_logger_init(DataLogger_CanTx);
     kms_init();
 
+    nms_init_position_test_data(); //! REMOVE THIS AFTER TESTING
+    nms_init_tsr_test_data();
+    nms_init_health_test_data();
+
     start_rtc_write = 1;
 
 }
@@ -388,7 +392,9 @@ void v_1sTasks(void)
     {
         nms_test_timer = 0U;
 
-        send_loco_postion_info_to_nms(1);
+        send_loco_postion_info_to_nms(0U);
+        // send_tsr_info_msg_to_nms(0U);
+        // send_skavach_health_msg_to_nms(0U);
     }
 
     #endif
