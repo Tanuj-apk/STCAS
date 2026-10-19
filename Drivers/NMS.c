@@ -960,3 +960,157 @@ void send_skavach_rssi_msg_to_nms(uint8_t unused_frame_num)
         NMS_PKT_TYPE_STATION_RSSI,
         nms_build_station_rssi(nms_ctx.payload, &nms_ctx.skavach_rssi));
 }
+
+//! NMS TEST 
+void nms_init_position_test_data(void)
+{
+    /* Common stationary header */
+    nms_ctx.kavach_postion.header.message_sequence = 0x1234U;
+    nms_ctx.kavach_postion.header.stationary_kavach_id = 0x5678U;
+    nms_ctx.kavach_postion.header.nms_system_id = 0x0001U;
+    nms_ctx.kavach_postion.header.system_version = 0x01U;
+
+    /* Date: 08/10/26 */
+    nms_ctx.kavach_postion.header.date_day   = 8U;
+    nms_ctx.kavach_postion.header.date_month = 10U;
+    nms_ctx.kavach_postion.header.date_year  = 26U;
+
+    /* Time: 14:30:25 */
+    nms_ctx.kavach_postion.header.time_hour = 14U;
+    nms_ctx.kavach_postion.header.time_min  = 30U;
+    nms_ctx.kavach_postion.header.time_sec  = 25U;
+
+    /* Active radio */
+    nms_ctx.kavach_postion.onboard_active_radio = 1U;
+
+    /* Sample loco packet: 10 bytes */
+    nms_ctx.kavach_postion.loco_packet_len = 10U;
+
+    nms_ctx.kavach_postion.loco_packet[0] = 0x10U;
+    nms_ctx.kavach_postion.loco_packet[1] = 0x20U;
+    nms_ctx.kavach_postion.loco_packet[2] = 0x30U;
+    nms_ctx.kavach_postion.loco_packet[3] = 0x40U;
+    nms_ctx.kavach_postion.loco_packet[4] = 0x50U;
+    nms_ctx.kavach_postion.loco_packet[5] = 0x60U;
+    nms_ctx.kavach_postion.loco_packet[6] = 0x70U;
+    nms_ctx.kavach_postion.loco_packet[7] = 0x80U;
+    nms_ctx.kavach_postion.loco_packet[8] = 0x90U;
+    nms_ctx.kavach_postion.loco_packet[9] = 0xA0U;
+
+    /* MA section information */
+    nms_ctx.kavach_postion.ma_section_count = 2U;
+
+    nms_ctx.kavach_postion.route_id[0] = 0x1001U;
+    nms_ctx.kavach_postion.route_id[1] = 0x1002U;
+}
+void nms_init_tsr_test_data(void)
+{
+    /* Common stationary header */
+    nms_ctx.tsr_info.header.message_sequence = 0x1235U;
+    nms_ctx.tsr_info.header.stationary_kavach_id = 0x5678U;
+    nms_ctx.tsr_info.header.nms_system_id = 0x0001U;
+    nms_ctx.tsr_info.header.system_version = 0x01U;
+
+    /* Date: 08/10/26 */
+    nms_ctx.tsr_info.header.date_day   = 8U;
+    nms_ctx.tsr_info.header.date_month = 10U;
+    nms_ctx.tsr_info.header.date_year  = 26U;
+
+    /* Time: 14:30:26 */
+    nms_ctx.tsr_info.header.time_hour = 14U;
+    nms_ctx.tsr_info.header.time_min  = 30U;
+    nms_ctx.tsr_info.header.time_sec  = 26U;
+
+    /* Sample TSR packet: 8 bytes */
+    nms_ctx.tsr_info.packet_len = 8U;
+
+    nms_ctx.tsr_info.packet[0] = 0x11U;
+    nms_ctx.tsr_info.packet[1] = 0x22U;
+    nms_ctx.tsr_info.packet[2] = 0x33U;
+    nms_ctx.tsr_info.packet[3] = 0x44U;
+    nms_ctx.tsr_info.packet[4] = 0x55U;
+    nms_ctx.tsr_info.packet[5] = 0x66U;
+    nms_ctx.tsr_info.packet[6] = 0x77U;
+    nms_ctx.tsr_info.packet[7] = 0x88U;
+}
+void nms_init_health_test_data(void)
+{
+    /* Stationary header */
+    nms_ctx.health.header.message_sequence = 0x1236U;
+    nms_ctx.health.header.stationary_kavach_id = 0x5678U;
+    nms_ctx.health.header.nms_system_id = 0x0001U;
+    nms_ctx.health.header.system_version = 0x01U;
+
+    /* Date: 12/10/26 */
+    nms_ctx.health.header.date_day   = 12U;
+    nms_ctx.health.header.date_month = 10U;
+    nms_ctx.health.header.date_year  = 26U;
+
+    /* Time: 09:47:30 */
+    nms_ctx.health.header.time_hour = 9U;
+    nms_ctx.health.header.time_min  = 47U;
+    nms_ctx.health.header.time_sec  = 30U;
+
+    /* Event information */
+    nms_ctx.health.event_count = 1U;
+    nms_ctx.health.event_id = 0x0102U;
+    nms_ctx.health.system_temperature = 35;
+
+    /* Radio status */
+    nms_ctx.health.active_radio_number = 1U;
+    nms_ctx.health.radio1_health = 1U;
+    nms_ctx.health.radio2_health = 0U;
+    nms_ctx.health.radio1_input_supply = 24U;
+    nms_ctx.health.radio2_input_supply = 0U;
+    nms_ctx.health.radio1_temperature = 30;
+    nms_ctx.health.radio2_temperature = 0;
+    nms_ctx.health.radio1_pa_temperature = 32U;
+    nms_ctx.health.radio2_pa_temperature = 0U;
+    nms_ctx.health.radio1_pa_supply_voltage = 48U;
+    nms_ctx.health.radio2_pa_supply_voltage = 0U;
+    nms_ctx.health.radio1_tx_pa_current = 5U;
+    nms_ctx.health.radio2_tx_pa_current = 0U;
+    nms_ctx.health.radio1_reverse_power = 2U;
+    nms_ctx.health.radio2_reverse_power = 0U;
+    nms_ctx.health.radio1_forward_power = 40U;
+    nms_ctx.health.radio2_forward_power = 0U;
+
+    /* Key and time-slot information */
+    nms_ctx.health.current_running_key = 1U;
+    nms_ctx.health.remaining_keys = 3U;
+    nms_ctx.health.session_key_checksum = 0x1234U;
+    nms_ctx.health.allocated_time_slot = 2U;
+    nms_ctx.health.new_loco_regular_pkt_time_offset = 0x0010U;
+    nms_ctx.health.loco_count = 2U;
+
+    /* Radio receive counters */
+    nms_ctx.health.radio1_rx_packet_count = 10U;
+    nms_ctx.health.radio2_rx_packet_count = 4U;
+
+    /* GPS status */
+    nms_ctx.health.active_gps_number = 1U;
+    nms_ctx.health.gps1_view = 1U;
+    nms_ctx.health.gps2_view = 0U;
+    nms_ctx.health.gps1_seconds = 30U;
+    nms_ctx.health.gps2_seconds = 0U;
+    nms_ctx.health.gps1_satellites = 8U;
+    nms_ctx.health.gps1_cno_max = 42U;
+    nms_ctx.health.gps2_satellites = 0U;
+    nms_ctx.health.gps2_cno_max = 0U;
+
+    /* GSM RSSI */
+    nms_ctx.health.gsm1_rssi = 20U;
+    nms_ctx.health.gsm2_rssi = 0U;
+
+    /* RFID and TIN counters */
+    nms_ctx.health.missing_rfid = 1U;
+    nms_ctx.health.invalid_rfid = 2U;
+    nms_ctx.health.conflict_route_rfid = 3U;
+    nms_ctx.health.conflicting_tin = 4U;
+    nms_ctx.health.missing_tin = 5U;
+
+    /* Status fields */
+    nms_ctx.health.loco_specific_sos = 0x00000001UL;
+    nms_ctx.health.train_exit_mode = 0x00000002UL;
+    nms_ctx.health.station_modules_health = 0x0003U;
+}

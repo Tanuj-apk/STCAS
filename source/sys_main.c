@@ -265,6 +265,10 @@ void KavachInit(void)
     kms_init();
     NMS_Test_Init();
 
+    nms_init_position_test_data(); //! REMOVE THIS AFTER TESTING
+    nms_init_tsr_test_data();
+    nms_init_health_test_data();
+
     start_rtc_write = 1;
 
 }
