@@ -2,6 +2,7 @@
 #include "can.h"
 #include <string.h>
 #include "gps.h"
+#include "datalogging.h"
 
 smocip_tx_t smocip_tx;
 smocip_rx_t smocip_rx;
@@ -16,6 +17,13 @@ typedef struct {
 
 static smocip_can_frame_ctx_t smocip_can1;
 static smocip_can_frame_ctx_t smocip_can2;
+static uint8_t smocip_previous_event_status;
+static uint8_t smocip_rx_dedup_initialized;
+static uint8_t smocip_rx_last_transaction_id;
+static uint8_t smocip_rx_expected_transaction_id;
+static uint8_t smocip_rx_last_payload[6];
+volatile uint32_t smocip_rx_duplicate_count;
+volatile uint32_t smocip_rx_conflict_count;
 
 volatile uint8_t smocip_ack_received_flag = 0U;
 volatile uint8_t smocip_ack_action = 0U;
@@ -26,6 +34,7 @@ static smocip_transaction_t smocip_transaction_queue[SMOCIP_TRANSACTION_QUEUE_SI
 static uint8_t smocip_queue_head  = 0U;
 static uint8_t smocip_queue_tail  = 0U;
 static uint8_t smocip_queue_count = 0U;
+static uint8_t smocip_next_transaction_id = 0U;
 
 static uint8_t smocip_queue_is_full(void)
 {
@@ -68,6 +77,8 @@ void smocip_transaction_start(uint8_t pkt_type, const uint8_t *payload, uint16_t
     transaction = &smocip_transaction_queue[smocip_queue_tail];
 
     transaction->pkt_type    = pkt_type;
+    transaction->transaction_id = smocip_next_transaction_id;
+    smocip_next_transaction_id = (uint8_t)((smocip_next_transaction_id + 1U) & 0x0FU);
     transaction->payload_len = payload_len;
 
     memcpy(transaction->payload, payload, payload_len);
@@ -171,7 +182,7 @@ static void smocip_transaction_send_next_fragment(smocip_transaction_t *transact
      */
     tx_buf[0] =
         (uint8_t)(((transaction->seq_total & 0x0FU) << 4) |
-                  (transaction->pkt_type & 0x0FU));
+                  (transaction->transaction_id & 0x0FU));
 
     /*
      * Byte 1:
@@ -387,6 +398,7 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
 {
   uint8_t seq_total;
   uint8_t seq_index;
+  uint8_t transaction_id;
 
   /* =========================================================
    * CAN1 / CAN2 REDUNDANCY CHECK
@@ -428,12 +440,42 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
   seq_total = ((data[1] & 0x03) << 4) | ((data[0] & 0xF0) >> 4);
 
   seq_index = (data[1] & 0xFC) >> 2;
+  transaction_id = data[0] & 0x0FU;
 
   if (seq_total != 1U)
     return;
 
   if (seq_index != 0U)
     return;
+
+  if (smocip_rx_dedup_initialized == 0U)
+  {
+    smocip_rx_dedup_initialized = 1U;
+  }
+  else if (transaction_id == smocip_rx_last_transaction_id)
+  {
+    if (memcmp(smocip_rx_last_payload, &data[2], 6U) == 0)
+    {
+      smocip_rx_duplicate_count++;
+      send_cpu_universal_ack((uint16_t)SMOCIP_RX_ID,
+                             ACK_ACTION_SMOCIP, CPU_ACK_OK);
+    }
+    else
+    {
+      smocip_rx_conflict_count++;
+    }
+    return;
+  }
+  else if (transaction_id != smocip_rx_expected_transaction_id)
+  {
+    smocip_rx_conflict_count++;
+    return;
+  }
+
+  smocip_rx_last_transaction_id = transaction_id;
+  smocip_rx_expected_transaction_id =
+      (uint8_t)((transaction_id + 1U) & 0x0FU);
+  memcpy(smocip_rx_last_payload, &data[2], 6U);
 
   smocip_rx.station_id[0] = data[2];
   smocip_rx.station_id[1] = data[3];
@@ -448,6 +490,20 @@ void smocip_rx_handle(uint8_t *data, can_source_t can_source)
   smocip_rx.stn_sos_gen = (data[7] >> 1) & 1U;
   smocip_rx.sos_cancel = (data[7] >> 2) & 1U;
   smocip_rx.sos_ack = (data[7] >> 3) & 1U;
+
+  if ((smocip_rx.stn_sos_gen != 0U) &&
+      ((smocip_previous_event_status & (1U << 1U)) == 0U))
+  {
+    (void)Log_Event_Simple(LOG_EVT_STATIONARY_SOS);
+  }
+
+  if ((smocip_rx.sos_cancel != 0U) &&
+      ((smocip_previous_event_status & (1U << 2U)) == 0U))
+  {
+    (void)Log_Event_Simple(LOG_EVT_STATIONARY_SOS_CANCEL);
+  }
+
+  smocip_previous_event_status = data[7];
 
   smocip_rx.valid = 1U;
   send_cpu_universal_ack((uint16_t)SMOCIP_RX_ID, ACK_ACTION_SMOCIP, CPU_ACK_OK);

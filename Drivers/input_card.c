@@ -1,5 +1,6 @@
 #include "input_card.h"
 #include <string.h>
+#include "datalogging.h"
 
 input_card_data_t input_card_data[INPUT_CARD_MAX_COUNT]; // Raw data received from Input Cards
 field_input_t
@@ -15,6 +16,13 @@ typedef struct {
 
 static input_card_can_frame_ctx_t input_card_can1[INPUT_CARD_MAX_COUNT];
 static input_card_can_frame_ctx_t input_card_can2[INPUT_CARD_MAX_COUNT];
+static uint8_t input_card_snapshot_valid[INPUT_CARD_MAX_COUNT];
+static uint8_t input_card_dedup_initialized[INPUT_CARD_MAX_COUNT];
+static uint8_t input_card_last_transaction_id[INPUT_CARD_MAX_COUNT];
+static uint8_t input_card_expected_transaction_id[INPUT_CARD_MAX_COUNT];
+static uint8_t input_card_last_payload[INPUT_CARD_MAX_COUNT][6];
+volatile uint32_t input_card_duplicate_count;
+volatile uint32_t input_card_conflict_count;
 
 static uint8_t input_card_get_index(uint32_t can_id) 
 {
@@ -143,8 +151,11 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
 
     uint8_t seq_total;
     uint8_t seq_index;
+    uint8_t transaction_id;
 
     uint32_t inputs;
+    uint32_t previous_inputs;
+    uint32_t changed_inputs;
     uint8_t card;
     uint8_t channel;
     uint16_t key;
@@ -152,6 +163,7 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
     seq_total = ((data[0] >> 4) & 0x0F) | ((data[1] & 0x03) << 4);
 
     seq_index = (data[1] >> 2) & 0x3F;
+    transaction_id = data[0] & 0x0FU;
 
     if (seq_total != 1U) 
     {
@@ -209,9 +221,39 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         return;
     }
 
+    if (input_card_dedup_initialized[index] == 0U)
+    {
+        input_card_dedup_initialized[index] = 1U;
+    }
+    else if (transaction_id == input_card_last_transaction_id[index])
+    {
+        if (memcmp(input_card_last_payload[index], &data[2], 6U) == 0)
+        {
+            input_card_duplicate_count++;
+            send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
+        }
+        else
+        {
+            input_card_conflict_count++;
+        }
+        return;
+    }
+    else if (transaction_id != input_card_expected_transaction_id[index])
+    {
+        input_card_conflict_count++;
+        return;
+    }
+
+    input_card_last_transaction_id[index] = transaction_id;
+    input_card_expected_transaction_id[index] =
+        (uint8_t)((transaction_id + 1U) & 0x0FU);
+    memcpy(input_card_last_payload[index], &data[2], 6U);
+
     inputs =
         ((uint32_t)data[2]) | ((uint32_t)data[3] << 8) |
         ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
+    previous_inputs = input_card_data[index].inputs;
+    changed_inputs = previous_inputs ^ inputs;
     input_card_data[index].inputs = inputs;
 
     send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
@@ -232,7 +274,18 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         * Extract the corresponding channel bit.
         */
         field_input_set_value(key, (uint8_t)((inputs >> channel) & 0x01U));
+
+        if ((input_card_snapshot_valid[index] != 0U) &&
+            ((changed_inputs & ((uint32_t)1U << channel)) != 0U))
+        {
+            (void)Log_Event_FieldInput(
+                key,
+                (uint8_t)((previous_inputs >> channel) & 0x01U),
+                (uint8_t)((inputs >> channel) & 0x01U));
+        }
     }
+
+    input_card_snapshot_valid[index] = 1U;
 }
 
 uint8_t field_input_get_value(uint16_t key) 

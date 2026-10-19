@@ -52,6 +52,7 @@ typedef struct {
 typedef struct
 {
     uint8_t  pkt_type;
+    uint8_t  transaction_id;
     uint16_t payload_len;
     uint8_t  payload[SMOCIP_MAX_PAYLOAD_LEN];
 
