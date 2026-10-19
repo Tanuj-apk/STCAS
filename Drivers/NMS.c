@@ -18,6 +18,7 @@ typedef struct
     uint8_t data[NMS_ACK_REASSEMBLY_LEN];
     uint64_t received_mask;
     uint8_t seq_total;
+    uint8_t transaction_id;
     uint8_t active;
 } nms_ack_reassembly_t;
 
@@ -29,11 +30,14 @@ volatile uint8_t nms_ack_status = 0U;
 
 static volatile uint8_t nms_ack_has_sequence = 0U;
 static volatile uint16_t nms_ack_sequence = 0U;
+static volatile uint8_t nms_ack_has_transaction = 0U;
+static volatile uint8_t nms_ack_transaction_id = 0U;
 
 static nms_ack_transaction_t nms_transaction_queue[NMS_TRANSACTION_QUEUE_SIZE];
 static uint8_t nms_queue_head = 0U;
 static uint8_t nms_queue_tail = 0U;
 static uint8_t nms_queue_count = 0U;
+static uint8_t nms_next_transaction_id = 0U;
 static nms_ack_reassembly_t nms_ack_rx;
 
 static void nms_pop_transaction(void);
@@ -520,6 +524,8 @@ void nms_ack_transaction_start(uint8_t message_type,
     transaction = &nms_transaction_queue[nms_queue_tail];
     memset(transaction, 0, sizeof(*transaction));
     transaction->message_type = message_type;
+    transaction->transaction_id = nms_next_transaction_id;
+    nms_next_transaction_id = (uint8_t)((nms_next_transaction_id + 1U) & 0x0FU);
     transaction->payload_len = payload_len;
     transaction->seq_total = seq_total;
     transaction->ack_required = nms_message_requires_ack(message_type, payload);
@@ -549,7 +555,8 @@ static void nms_build_fragment(uint8_t *can_frame,
     memset(can_frame, 0, 8U);
     seq_total_lsb = transaction->seq_total & 0x0FU;
     seq_total_msb = (transaction->seq_total >> 4U) & 0x03U;
-    can_frame[0] = (uint8_t)((seq_total_lsb << 4U) | NMS_CAN_ENVELOPE_TYPE);
+    can_frame[0] = (uint8_t)((seq_total_lsb << 4U) |
+                             (transaction->transaction_id & 0x0FU));
     can_frame[1] = (uint8_t)(((transaction->seq_index & 0x3FU) << 2U) |
                              seq_total_msb);
     payload_offset = (uint16_t)transaction->seq_index * NMS_PAYLOAD_BYTES;
@@ -638,6 +645,8 @@ static void nms_retry_or_finish(nms_ack_transaction_t *transaction)
 }
 
 static void nms_ack_received_internal(uint8_t ack_status,
+                                      uint8_t has_transaction,
+                                      uint8_t transaction_id,
                                       uint8_t has_sequence,
                                       uint16_t message_sequence)
 {
@@ -646,6 +655,12 @@ static void nms_ack_received_internal(uint8_t ack_status,
 
     if ((transaction == NULL) || (transaction->active == 0U) ||
         (transaction->waiting_for_ack == 0U))
+    {
+        return;
+    }
+
+    if ((has_transaction != 0U) &&
+        ((transaction_id & 0x0FU) != transaction->transaction_id))
     {
         return;
     }
@@ -673,7 +688,7 @@ static void nms_ack_received_internal(uint8_t ack_status,
 void nms_ack_received(uint8_t action_type, uint8_t ack_status)
 {
     (void)action_type;
-    nms_ack_received_internal(ack_status, 0U, 0U);
+    nms_ack_received_internal(ack_status, 0U, 0U, 0U, 0U);
 }
 
 void nms_ack_process(void)
@@ -682,6 +697,8 @@ void nms_ack_process(void)
     uint8_t action;
     uint8_t status;
     uint8_t has_sequence;
+    uint8_t has_transaction;
+    uint8_t transaction_id;
     uint16_t sequence;
 
     if (nms_ack_received_flag != 0U)
@@ -689,10 +706,13 @@ void nms_ack_process(void)
         action = nms_ack_action;
         status = nms_ack_status;
         has_sequence = nms_ack_has_sequence;
+        has_transaction = nms_ack_has_transaction;
+        transaction_id = nms_ack_transaction_id;
         sequence = nms_ack_sequence;
         nms_ack_received_flag = 0U;
         (void)action;
-        nms_ack_received_internal(status, has_sequence, sequence);
+        nms_ack_received_internal(status, has_transaction, transaction_id,
+                                  has_sequence, sequence);
     }
 
     transaction = nms_get_transaction();
@@ -762,6 +782,8 @@ static void nms_accept_annexure_ack(void)
     nms_ack_status = CPU_ACK_OK;
     nms_ack_sequence = sequence;
     nms_ack_has_sequence = 1U;
+    nms_ack_transaction_id = nms_ack_rx.transaction_id;
+    nms_ack_has_transaction = 1U;
     nms_ack_received_flag = 1U;
     nms_ack_reassembly_reset();
 }
@@ -769,7 +791,7 @@ static void nms_accept_annexure_ack(void)
 void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
 {
     uint16_t ack_can_id;
-    uint8_t packet_type;
+    uint8_t transaction_id;
     uint8_t seq_total;
     uint8_t seq_index;
     uint16_t offset;
@@ -787,32 +809,39 @@ void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
     {
         nms_ack_action = data[2];
         nms_ack_status = data[3];
+        nms_ack_transaction_id = data[4] & 0x0FU;
+        nms_ack_has_transaction = 1U;
         nms_ack_has_sequence = 0U;
         nms_ack_received_flag = 1U;
         return;
     }
 
     /* Also accept the gateway's fragmented, CRC-validated Annexure-G ACK. */
-    packet_type = data[0] & 0x0FU;
+    transaction_id = data[0] & 0x0FU;
     seq_total = (uint8_t)(((data[0] >> 4U) & 0x0FU) |
                           ((data[1] & 0x03U) << 4U));
     seq_index = (data[1] >> 2U) & 0x3FU;
 
-    if ((packet_type != NMS_CAN_ENVELOPE_TYPE) || (seq_total == 0U) ||
+    if ((seq_total == 0U) ||
         (seq_index >= seq_total) ||
         (((uint16_t)seq_total * NMS_PAYLOAD_BYTES) > NMS_ACK_REASSEMBLY_LEN))
     {
         return;
     }
 
-    if (seq_index == 0U)
+    if ((seq_index == 0U) &&
+        ((nms_ack_rx.active == 0U) ||
+         (nms_ack_rx.transaction_id != transaction_id)))
     {
         nms_ack_reassembly_reset();
         nms_ack_rx.active = 1U;
         nms_ack_rx.seq_total = seq_total;
+        nms_ack_rx.transaction_id = transaction_id;
     }
 
-    if ((nms_ack_rx.active == 0U) || (nms_ack_rx.seq_total != seq_total))
+    if ((nms_ack_rx.active == 0U) ||
+        (nms_ack_rx.seq_total != seq_total) ||
+        (nms_ack_rx.transaction_id != transaction_id))
     {
         return;
     }

@@ -71,6 +71,7 @@
 #include "spi.h"
 #include "hcms3902.h"
 #include "NMS.h"
+#include "nms_test.h"
 #include "datalogging.h"
 /* USER CODE END */
 
@@ -95,13 +96,10 @@ void KavachInit(void);
 static void Read_CPU_Device_ID(void);
 static bool DataLogger_CanTx(
     uint32_t can_id,
-    const uint8_t data[DATA_LOGGER_CAN_FRAME_SIZE]);
+    const uint8_t data[EVENT_LOG_CAN_FRAME_SIZE]);
 uint32_t calculate_firmware_crc(void);
 
-#define NMS_TEST_ENABLE       1U
-#define NMS_TEST_PERIOD_SEC   5U
-
-static uint8_t nms_test_timer = 0U;
+static uint8_t event_log_snapshot_timer = 0U;
 
 #define FIRMWARE_CRC_START 0x00000000UL
 #define FIRMWARE_CRC_END 0x0002383FUL
@@ -216,9 +214,9 @@ static void Read_CPU_Device_ID(void)
 
 static bool DataLogger_CanTx(
     uint32_t can_id,
-    const uint8_t data[DATA_LOGGER_CAN_FRAME_SIZE])
+    const uint8_t data[EVENT_LOG_CAN_FRAME_SIZE])
 {
-    if (can_id != can_get_local_tx_id(DATA_LOGGER_TX_CAN_ID))
+    if (can_id != EVENT_LOG_CAN_ID)
     {
         return false;
     }
@@ -263,8 +261,9 @@ void KavachInit(void)
     sciReceive(GPS2_SCI, 1U, (uint8 *)&rx_byte);
 
     can_manager_init();
-    data_logger_init(DataLogger_CanTx);
+    EventLog_Init(DataLogger_CanTx);
     kms_init();
+    NMS_Test_Init();
 
     start_rtc_write = 1;
 
@@ -277,8 +276,8 @@ void v_1msTasks(void)
 
 void v_5msTasks(void)
 {
-    data_logger_process_ack();
-    (void)data_logger_process_tx(1U);
+    EventLog_ProcessAck();
+    (void)EventLog_ProcessTx(1U);
     radio_ack_process();
     radio_tx_process();
     smocip_ack_process();
@@ -380,18 +379,31 @@ void v_100msTasks(void)
 
 void v_1sTasks(void)
 {
-    #if NMS_TEST_ENABLE
+    uint8_t event_log_input_image[EVENT_LOG_INPUT_IMAGE_BYTES];
+    uint16_t event_log_input_index;
 
-    nms_test_timer++;
-
-    if (nms_test_timer >= NMS_TEST_PERIOD_SEC)
+    event_log_snapshot_timer++;
+    if(event_log_snapshot_timer >= EVENT_LOG_SNAPSHOT_PERIOD_SEC)
     {
-        nms_test_timer = 0U;
+        event_log_snapshot_timer = 0U;
+        memset(event_log_input_image, 0, sizeof(event_log_input_image));
+        for(event_log_input_index = 0U;
+            event_log_input_index < EVENT_LOG_STATIONARY_INPUT_COUNT;
+            event_log_input_index++)
+        {
+            if(field_input_get_value((uint16_t)(event_log_input_index + 1U)) != 0U)
+            {
+                event_log_input_image[event_log_input_index / 8U] |=
+                    (uint8_t)(1U << (event_log_input_index % 8U));
+            }
+        }
 
-        send_loco_postion_info_to_nms(1);
+        (void)Log_Event_StationarySnapshot(event_log_input_image,
+                                           smocip_rx.stn_sos_gen != 0U,
+                                           can_manager_get_hb_miss_mask());
     }
 
-    #endif
+    NMS_Test_1sTask();
 
     /* ---------- Fallback 1-second CPU time update + CAN send ---------- */
     start_rtc_read = 1;

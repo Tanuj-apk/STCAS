@@ -129,6 +129,14 @@ uint32_t last_osma_rx_time = 0;
 uint8_t osma_active = 0;
 
 uint8_t last_ref_profile_num = 0;
+static uint8_t radio_direct_transaction_id = 0U;
+static uint8_t radio_rx_last_valid = 0U;
+static uint8_t radio_rx_last_transaction_id = 0U;
+static uint8_t radio_rx_expected_transaction_id = 0U;
+static uint16_t radio_rx_last_payload_len = 0U;
+static uint8_t radio_rx_last_payload[RADIO_MAX_PAYLOAD_LEN];
+volatile uint32_t radio_rx_duplicate_packet_count;
+volatile uint32_t radio_rx_conflict_packet_count;
 
 typedef struct
 {
@@ -612,15 +620,19 @@ static uint8_t radio_parse_arp(const uint8_t *p, uint16_t len)
     return 1;
 }
 
-void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_total, uint8_t seq_index)
+void radio_build_fragment(uint8_t *can_frame, uint8_t seq_total,
+                          uint8_t seq_index)
 {
     /* =========================================================
      * CAN FRAME BYTE 0
      * ---------------------------------------------------------
      * [7:4] ? Total number of fragments (seq_total)
-     * [3:0] ? Packet type (ORP / ARP / etc.)
+     * [3:0] ? Transaction ID
      * ========================================================= */
-    can_frame[0] = ((seq_total & 0x0F) << 4) | (pkt_type & 0x0F);
+    if (seq_index == 0U)
+        radio_direct_transaction_id = (uint8_t)((radio_direct_transaction_id + 1U) & 0x0FU);
+    can_frame[0] = (uint8_t)(((seq_total & 0x0FU) << 4) |
+                             (radio_direct_transaction_id & 0x0FU));
 
     /* =========================================================
      * CAN FRAME BYTE 1
@@ -662,7 +674,8 @@ void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_tota
 //!==========================================================================
 static void radio_build_fragment_from_transaction(uint8_t *can_frame, const radio_ack_transaction_t *transaction, uint8_t seq_index)
 {
-    can_frame[0] = ((transaction->seq_total & 0x0FU) << 4) | (transaction->pkt_type & 0x0FU);
+    can_frame[0] = (uint8_t)(((transaction->seq_total & 0x0FU) << 4) |
+                             (transaction->transaction_id & 0x0FU));
 
     can_frame[1] = ((seq_index & 0x3FU) << 2) | ((transaction->seq_total >> 4) & 0x03U);
 
@@ -783,6 +796,8 @@ static uint8_t radio_ack_transaction_start(radio_id_t radio_id, uint8_t pkt_type
      */
     transaction->radio_id = radio_id;
     transaction->pkt_type = pkt_type;
+    transaction->transaction_id = radio_direct_transaction_id;
+    radio_direct_transaction_id = (uint8_t)((radio_direct_transaction_id + 1U) & 0x0FU);
     transaction->payload_len = radio_ctx.payload_len;
 
     memcpy(transaction->payload, radio_ctx.payload, radio_ctx.payload_len);
@@ -1321,12 +1336,13 @@ void radio_ack_rx_handle(uint32_t can_id, uint8_t *data)
 
 void radio_rx_handle(uint32_t can_id, uint8_t *data)
 {
+    uint64_t complete_mask;
     radio_rx_can_id = can_id;
 
     /* ===== DEBUG COUNTER ===== */
     radio_rx_isr_count++;   /* increments on every CAN RX */
 
-    uint8_t pkt_type  = (data[0]) & 0x0F;
+    uint8_t transaction_id  = (data[0]) & 0x0F;
     uint8_t total_frags = ((data[1] & 0x03) << 4) | ((data[0] & 0xf0) >> 4);
     uint8_t seq_index = (data[1] & 0xfc) >>2;
 
@@ -1343,16 +1359,24 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
 
         radio_rx_reset();
         radio_rx_ctx.active     = 1;
-        radio_rx_ctx.pkt_type   = pkt_type;
+        radio_rx_ctx.transaction_id = transaction_id;
         radio_rx_ctx.seq_total  = total_frags;
         radio_rx_ctx.start_time = seconds_uptime;
     }
 
-    if (radio_rx_ctx.pkt_type != pkt_type)
+    if (radio_rx_ctx.transaction_id != transaction_id)
     {
+        if (seq_index != 0U)
+            return;
         radio_rx_reset();
-        return;
+        radio_rx_ctx.active = 1U;
+        radio_rx_ctx.transaction_id = transaction_id;
+        radio_rx_ctx.seq_total = total_frags;
+        radio_rx_ctx.start_time = seconds_uptime;
     }
+
+    if (radio_rx_ctx.seq_total != total_frags)
+        return;
 
     if(radio_rx_ctx.received_mask & (1ULL << seq_index))
         return;
@@ -1381,9 +1405,47 @@ void radio_rx_handle(uint32_t can_id, uint8_t *data)
         radio_rx_ctx.payload_len = new_len;
     }
 
-    if (radio_rx_ctx.received_mask == ((1U << total_frags) - 1U))
+    complete_mask = (total_frags == 64U) ? UINT64_MAX :
+                    ((1ULL << total_frags) - 1ULL);
+    if (radio_rx_ctx.received_mask == complete_mask)
     {
         /* ===== FULL PACKET RECEIVED ===== */
+        radio_rx_ctx.pkt_type = (uint8_t)(radio_rx_ctx.payload[0] >> 4);
+
+        if ((radio_rx_last_valid != 0U) &&
+            (radio_rx_ctx.transaction_id == radio_rx_last_transaction_id))
+        {
+            if ((radio_rx_last_payload_len == radio_rx_ctx.payload_len) &&
+                (memcmp(radio_rx_last_payload, radio_rx_ctx.payload,
+                        radio_rx_ctx.payload_len) == 0))
+            {
+                radio_rx_duplicate_packet_count++;
+                send_cpu_universal_ack((uint16_t)radio_rx_can_id,
+                                       radio_rx_ctx.pkt_type, CPU_ACK_OK);
+            }
+            else
+            {
+                radio_rx_conflict_packet_count++;
+            }
+            radio_rx_ctx.active = 0U;
+            return;
+        }
+
+        if ((radio_rx_last_valid != 0U) &&
+            (radio_rx_ctx.transaction_id != radio_rx_expected_transaction_id))
+        {
+            radio_rx_conflict_packet_count++;
+            radio_rx_ctx.active = 0U;
+            return;
+        }
+
+        radio_rx_last_valid = 1U;
+        radio_rx_last_transaction_id = radio_rx_ctx.transaction_id;
+        radio_rx_expected_transaction_id =
+            (uint8_t)((radio_rx_ctx.transaction_id + 1U) & 0x0FU);
+        radio_rx_last_payload_len = radio_rx_ctx.payload_len;
+        memcpy(radio_rx_last_payload, radio_rx_ctx.payload,
+               radio_rx_ctx.payload_len);
         radio_rx_pkt_count++;
         radio_process_complete_packet();
         radio_rx_ctx.active = 0;

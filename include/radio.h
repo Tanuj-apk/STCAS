@@ -41,6 +41,7 @@ typedef struct
     radio_id_t radio_id;
 
     uint8_t  pkt_type;
+    uint8_t  transaction_id;
 
     uint16_t payload_len;
     uint8_t  payload[RADIO_MAX_PAYLOAD_LEN];
@@ -85,6 +86,7 @@ typedef struct
 {
     uint8_t  active;
     uint8_t  pkt_type;
+    uint8_t  transaction_id;
     uint8_t  seq_total;
     uint64_t  received_mask;
     uint16_t payload_len;
@@ -338,7 +340,8 @@ void radio_clear_aap(void);
 /* Existing */
 void radio_send_arp(radio_id_t radio_id);
 void radio_update_frame_number(void);
-void radio_build_fragment(uint8_t *can_frame, uint8_t pkt_type, uint8_t seq_total, uint8_t seq_index);
+void radio_build_fragment(uint8_t *can_frame, uint8_t seq_total,
+                          uint8_t seq_index);
 
 void radio_ack_rx_handle(uint32_t can_id, uint8_t *data);
 

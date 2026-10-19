@@ -11,6 +11,7 @@ typedef struct
 {
     uint8_t active;
     uint8_t message_type;
+    uint8_t transaction_id;
     uint8_t total_fragments;
     uint16_t received_mask;
     uint16_t data_length;
@@ -19,6 +20,13 @@ typedef struct
 } kms_rx_context_t;
 
 static kms_rx_context_t kms_rx_context;
+static uint8_t kms_rx_last_valid;
+static uint8_t kms_rx_last_transaction_id;
+static uint8_t kms_rx_expected_transaction_id;
+static uint16_t kms_rx_last_length;
+static uint8_t kms_rx_last_data[KMS_MAX_DATA_BYTES];
+volatile uint32_t kms_rx_duplicate_count;
+volatile uint32_t kms_rx_conflict_count;
 
 volatile uint32_t kms_unique_set_id;
 volatile uint8_t kms_identification_ack;
@@ -71,47 +79,49 @@ static void kms_copy_from_rx(volatile uint8_t *destination,
 
 static bool kms_apply_complete_message(void)
 {
+    kms_rx_context.message_type = kms_rx_context.data[0] & 0x0FU;
+
     switch (kms_rx_context.message_type)
     {
     case KMS_MSG_UNIQUE_SET_ID:
-        if (kms_rx_context.data_length < 4U)
+        if (kms_rx_context.data_length < 5U)
         {
             return false;
         }
         kms_unique_set_id =
-            (uint32_t)kms_rx_context.data[0] |
-            ((uint32_t)kms_rx_context.data[1] << 8U) |
-            ((uint32_t)kms_rx_context.data[2] << 16U) |
-            ((uint32_t)kms_rx_context.data[3] << 24U);
+            (uint32_t)kms_rx_context.data[1] |
+            ((uint32_t)kms_rx_context.data[2] << 8U) |
+            ((uint32_t)kms_rx_context.data[3] << 16U) |
+            ((uint32_t)kms_rx_context.data[4] << 24U);
         return true;
 
     case KMS_MSG_IDENTIFICATION_ACK:
-        if (kms_rx_context.data_length < 1U)
+        if (kms_rx_context.data_length < 2U)
         {
             return false;
         }
-        kms_identification_ack = kms_rx_context.data[0];
+        kms_identification_ack = kms_rx_context.data[1];
         kms_identification_ack_valid = 1U;
         return true;
 
     case KMS_MSG_AUTHENTICATION_KEYS:
-        if (kms_rx_context.data_length < 40U)
+        if (kms_rx_context.data_length < 41U)
         {
             return false;
         }
-        kms_copy_from_rx(kms_key_validity_start_time, 0U, 4U);
-        kms_copy_from_rx(kms_key_set_end_time, 4U, 4U);
-        kms_copy_from_rx(kms_key_1, 8U, 16U);
-        kms_copy_from_rx(kms_key_2, 24U, 16U);
+        kms_copy_from_rx(kms_key_validity_start_time, 1U, 4U);
+        kms_copy_from_rx(kms_key_set_end_time, 5U, 4U);
+        kms_copy_from_rx(kms_key_1, 9U, 16U);
+        kms_copy_from_rx(kms_key_2, 25U, 16U);
         kms_authentication_keys_valid = 1U;
         return true;
 
     case KMS_MSG_OTP:
-        if (kms_rx_context.data_length < 4U)
+        if (kms_rx_context.data_length < 5U)
         {
             return false;
         }
-        kms_copy_from_rx(kms_otp, 0U, 4U);
+        kms_copy_from_rx(kms_otp, 1U, 4U);
         kms_otp_valid = 1U;
         return true;
 
@@ -158,12 +168,13 @@ bool kms_send_auth_key_query(void)
 
 void kms_rx_handle(uint32_t can_id, uint8_t *data)
 {
-    uint8_t message_type;
+    uint8_t transaction_id;
     uint8_t total_fragments;
     uint8_t fragment_index;
     uint16_t fragment_bit;
     uint16_t offset;
     uint16_t expected_mask;
+    uint8_t status;
 
     if ((data == NULL) ||
         ((can_id != KMS_RX_CAN_ID_1) && (can_id != KMS_RX_CAN_ID_2)))
@@ -172,7 +183,7 @@ void kms_rx_handle(uint32_t can_id, uint8_t *data)
         return;
     }
 
-    message_type = data[0] & 0x0FU;
+    transaction_id = data[0] & 0x0FU;
     total_fragments = kms_get_total_fragments(data);
     fragment_index = (data[1] >> 2U) & 0x3FU;
 
@@ -194,16 +205,23 @@ void kms_rx_handle(uint32_t can_id, uint8_t *data)
 
         kms_reset_rx();
         kms_rx_context.active = 1U;
-        kms_rx_context.message_type = message_type;
+        kms_rx_context.transaction_id = transaction_id;
         kms_rx_context.total_fragments = total_fragments;
         kms_rx_context.start_time = seconds_uptime;
     }
-    else if ((kms_rx_context.message_type != message_type) ||
+    else if ((kms_rx_context.transaction_id != transaction_id) ||
              (kms_rx_context.total_fragments != total_fragments))
     {
-        kms_rx_invalid_count++;
+        if (fragment_index != 0U)
+        {
+            kms_rx_invalid_count++;
+            return;
+        }
         kms_reset_rx();
-        return;
+        kms_rx_context.active = 1U;
+        kms_rx_context.transaction_id = transaction_id;
+        kms_rx_context.total_fragments = total_fragments;
+        kms_rx_context.start_time = seconds_uptime;
     }
 
     fragment_bit = (uint16_t)1U << fragment_index;
@@ -233,8 +251,35 @@ void kms_rx_handle(uint32_t can_id, uint8_t *data)
     expected_mask = (uint16_t)(((uint16_t)1U << total_fragments) - 1U);
     if (kms_rx_context.received_mask == expected_mask)
     {
-        uint8_t status = kms_apply_complete_message() ?
-                         CPU_ACK_OK : CPU_ACK_INVALID;
+        if ((kms_rx_last_valid != 0U) &&
+            (kms_rx_context.transaction_id == kms_rx_last_transaction_id))
+        {
+            if ((kms_rx_last_length == kms_rx_context.data_length) &&
+                (memcmp(kms_rx_last_data, kms_rx_context.data,
+                        kms_rx_context.data_length) == 0))
+            {
+                kms_rx_duplicate_count++;
+                send_cpu_universal_ack((uint16_t)can_id,
+                                       ACK_ACTION_ACCESS_AUTH, CPU_ACK_OK);
+            }
+            else
+            {
+                kms_rx_conflict_count++;
+            }
+            kms_reset_rx();
+            return;
+        }
+
+        if ((kms_rx_last_valid != 0U) &&
+            (kms_rx_context.transaction_id != kms_rx_expected_transaction_id))
+        {
+            kms_rx_conflict_count++;
+            kms_reset_rx();
+            return;
+        }
+
+        status = kms_apply_complete_message() ?
+                 CPU_ACK_OK : CPU_ACK_INVALID;
 
         send_cpu_universal_ack((uint16_t)can_id,
                                ACK_ACTION_ACCESS_AUTH,
@@ -245,6 +290,13 @@ void kms_rx_handle(uint32_t can_id, uint8_t *data)
         }
         else
         {
+            kms_rx_last_valid = 1U;
+            kms_rx_last_transaction_id = kms_rx_context.transaction_id;
+            kms_rx_expected_transaction_id =
+                (uint8_t)((kms_rx_context.transaction_id + 1U) & 0x0FU);
+            kms_rx_last_length = kms_rx_context.data_length;
+            memcpy(kms_rx_last_data, kms_rx_context.data,
+                   kms_rx_context.data_length);
             kms_query_pending = 0U;
             kms_query_retry_count = 0U;
             kms_query_start_time = 0U;

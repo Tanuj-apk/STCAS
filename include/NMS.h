@@ -8,8 +8,8 @@
 #define NMS_ACK_CAN_ID                   0x0224U
 #define NMS_TX_MB                        canMESSAGE_BOX20
 
-/* CAN envelope used between the TMS570 and the Ethernet gateway. */
-#define NMS_CAN_ENVELOPE_TYPE            0x01U
+/* Envelope nibble retained only for fragmented Annexure-G ACKs from Tiva. */
+#define NMS_CAN_ACK_ENVELOPE_TYPE        0x01U
 #define NMS_PAYLOAD_BYTES                6U
 #define NMS_MAX_FRAGMENTS                63U
 #define NMS_MAX_PAYLOAD_LEN              (NMS_PAYLOAD_BYTES * NMS_MAX_FRAGMENTS)
@@ -297,6 +297,7 @@ typedef struct
 typedef struct
 {
     uint8_t message_type;
+    uint8_t transaction_id;
     uint16_t payload_len;
     uint8_t payload[NMS_MAX_PAYLOAD_LEN];
     uint8_t seq_total;

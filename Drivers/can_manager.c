@@ -3,6 +3,7 @@
 #include "rti.h"
 #include "kms.h"
 #include "input_card.h"
+#include "datalogging.h"
 
 /* ============================================================
  *  CONFIG
@@ -27,6 +28,11 @@ uint32_t hb_start_time;
 uint32_t last_hb_tx_time;
 uint32_t hb_ok_mask;
 uint32_t hb_miss_mask;
+
+uint32_t can_manager_get_hb_miss_mask(void)
+{
+    return hb_miss_mask;
+}
 uint8_t hb_mandatory_missing;
 
 /* ============================================================
@@ -129,6 +135,7 @@ uint8_t system_faulty_flag;
 #define NUM_CAN_DEVICES ((uint8_t)CAN_DEVICE_COUNT)
 uint8_t  hb_ack_bitmap[NUM_CAN_DEVICES];
 uint8_t  ack_bitmap[NUM_CAN_DEVICES];
+static uint32_t last_logged_hb_miss_mask;
 
 static uint8_t can_device_is_active(uint8_t device_index)
 {
@@ -137,6 +144,30 @@ static uint8_t can_device_is_active(uint8_t device_index)
     input_card_number = can_devices[device_index].input_card_number;
     return (uint8_t)((input_card_number == 0U) ||
                      (input_card_number <= STCAS_INPUT_CARD_COUNT));
+}
+
+static void can_manager_log_heartbeat_transitions(uint32_t new_miss_mask)
+{
+    uint32_t changed_mask;
+    uint8_t i;
+
+    changed_mask = last_logged_hb_miss_mask ^ new_miss_mask;
+    for (i = 0U; i < NUM_CAN_DEVICES; i++)
+    {
+        uint32_t device_bit = ((uint32_t)1U << i);
+
+        if ((can_device_is_active(i) == 0U) ||
+            ((changed_mask & device_bit) == 0U))
+        {
+            continue;
+        }
+
+        (void)Log_Event_PeripheralCommunication(
+            ((new_miss_mask & device_bit) == 0U),
+            i,
+            (can_devices[i].mandatory != 0U));
+    }
+    last_logged_hb_miss_mask = new_miss_mask;
 }
 
 volatile uint32_t gps1_firmware_checksum = 0U;
@@ -363,6 +394,7 @@ void can_manager_init(void)
     mandatory_missing = 0U;
     hb_mandatory_missing = 0U;
     system_faulty_flag = 0U;
+    last_logged_hb_miss_mask = 0U;
     hb_in_progress = 0U;
     last_hb_tx_time = seconds_uptime;
     startup_start_time   = seconds_uptime;
@@ -520,6 +552,7 @@ int can_manager_poll_startup(void)
                 }
             }
             system_faulty_flag = hb_mandatory_missing;
+            can_manager_log_heartbeat_transitions(hb_miss_mask);
         }
     }
 

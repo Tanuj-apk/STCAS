@@ -17,7 +17,6 @@ uint8_t seq_index;
 uint8_t rfidDataMatchFlag;
 uint8_t rfidMissCount1;
 uint8_t rfidMissCount2;
-uint8_t msg_type;
 
 uint8_t rfid1_fault = 0;   // Reader at CAN ID 0x120
 uint8_t rfid2_fault = 0;   // Reader at CAN ID 0x121
@@ -38,6 +37,7 @@ typedef struct
 {
     uint8_t  active;
     uint8_t  tag_type;
+    uint8_t  transaction_id;
     // uint8_t  tag_instance;
 
     uint8_t  seq_total;
@@ -958,19 +958,14 @@ void rfid_rx_handle(uint32_t can_id, uint8_t *data)
     /* ---------------- New 1-byte header ----------------
     *
     * Byte0:
-    * Bits 3:0 = MSG_TYPE
+    * Bits 3:0 = TRANSACTION_ID
     * Bits 5:4 = SEQ_TOTAL
     * Bits 7:6 = SEQ_INDEX
     */
 
     uint8_t header = data[0];
 
-    msg_type = (header) & 0x0F;
-
-    if (msg_type == 0x00)
-    {
-//        dmi_tags_signals.tr  = 1;
-    }
+    uint8_t transaction_id = header & 0x0FU;
 
     seq_total = (header >> 4) & 0x03;
     seq_index = (header >> 6) & 0x03;
@@ -997,7 +992,20 @@ void rfid_rx_handle(uint32_t can_id, uint8_t *data)
         // rfid_ctx.tag_type     = tag_type;
         // rfid_ctx.tag_instance = tag_instance;
         rfid_ctx.seq_total    = seq_total;
+        rfid_ctx.transaction_id = transaction_id;
         rfid_ctx.start_time   = seconds_uptime;
+    }
+
+    if ((rfid_ctx.transaction_id != transaction_id) ||
+        (rfid_ctx.seq_total != seq_total))
+    {
+        if (seq_index != 0U)
+            return;
+        rfid_ctx_reset();
+        rfid_ctx.active = 1U;
+        rfid_ctx.seq_total = seq_total;
+        rfid_ctx.transaction_id = transaction_id;
+        rfid_ctx.start_time = seconds_uptime;
     }
 
     /* Ignore duplicate fragment */

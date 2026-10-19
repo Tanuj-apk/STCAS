@@ -178,6 +178,7 @@ void can_manager_init(void);
 void can_scheduler_1s_tick(void);
 int  can_manager_poll_startup(void);
 uint8_t can_startup_in_progress(void);
+uint32_t can_manager_get_hb_miss_mask(void);
 
 /* ACK handlers */
 void can_manager_handle_ack(uint32_t can_id, uint8_t *data);
