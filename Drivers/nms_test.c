@@ -5,6 +5,8 @@
 #include <string.h>
 
 #define NMS_TEST_MESSAGE_COUNT       11U
+/* Deliberately asymmetric values provide an endian sentinel in CAN/Ethernet
+ * captures: 0x1234 -> 34 12, 0x56789A -> 9A 78 56, 0x4321 -> 21 43. */
 #define NMS_TEST_STATIONARY_ID       0x1234U
 #define NMS_TEST_LOCO_ID             0x0056789AUL
 #define NMS_TEST_NMS_SYSTEM_ID       0x4321U

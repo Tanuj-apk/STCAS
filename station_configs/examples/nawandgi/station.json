@@ -1,0 +1,27 @@
+{
+  "format": "STCAS commissioning source",
+  "format_version": "draft-1",
+  "station_name": "NAWANDGI",
+  "station_id": null,
+  "configuration_revision": null,
+  "operational_status": "example_incomplete",
+  "field_inputs": "field_inputs.csv",
+  "sections": {
+    "signals": "signals.csv",
+    "points": "points.csv",
+    "tracks": "tracks.csv",
+    "routes": "not_encoded_yet",
+    "route_conflicts": "not_encoded_yet",
+    "topology": "not_encoded_yet",
+    "profiles": "not_available",
+    "adjacent_stations": "not_available",
+    "radio_parameters": "not_available"
+  },
+  "notes": [
+    "The 93 logical field inputs mirror the existing development mapping.",
+    "For bench testing, logical inputs are allocated sequentially across three 32-input cards as 32, 32, and 29 configured channels.",
+    "The sequential card/channel allocation must be replaced by the commissioned relay wiring schedule for an installation.",
+    "All raw-bit meanings require commissioning confirmation.",
+    "This source file is not accepted by the embedded loader and cannot enable operation."
+  ]
+}

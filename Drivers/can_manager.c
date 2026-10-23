@@ -143,7 +143,7 @@ static uint8_t can_device_is_active(uint8_t device_index)
 
     input_card_number = can_devices[device_index].input_card_number;
     return (uint8_t)((input_card_number == 0U) ||
-                     (input_card_number <= STCAS_INPUT_CARD_COUNT));
+                     input_card_is_configured(input_card_number));
 }
 
 static void can_manager_log_heartbeat_transitions(uint32_t new_miss_mask)
@@ -233,6 +233,8 @@ static void update_card_checksums(void)
     uint8_t input_cards_ready;
     uint8_t input_card_index;
     uint8_t device_index;
+    uint8_t configured_input_card_count;
+    uint16_t configured_input_card_bitmap;
 
     uint32_t radio1_checksum;
     uint32_t radio2_checksum;
@@ -340,11 +342,19 @@ static void update_card_checksums(void)
      * CRC covers all cards configured for this station, in
      * ascending card-number order.
      * ======================================================== */
-    input_cards_ready = 1U;
+    configured_input_card_bitmap = input_card_get_configured_card_bitmap();
+    configured_input_card_count = 0U;
+    input_cards_ready = (configured_input_card_bitmap != 0U) ? 1U : 0U;
     for (input_card_index = 0U;
-         input_card_index < STCAS_INPUT_CARD_COUNT;
+         input_card_index < INPUT_CARD_MAX_COUNT;
          input_card_index++)
     {
+        if ((configured_input_card_bitmap &
+             ((uint16_t)1U << input_card_index)) == 0U)
+        {
+            continue;
+        }
+
         device_index = input_card_device_indices[input_card_index];
         if (ack_bitmap[device_index] == 0U)
         {
@@ -354,14 +364,15 @@ static void update_card_checksums(void)
 
         checksum32_to_bytes(peripheral_firmware_checksum[device_index],
                             input_checksum_data +
-                            ((uint16_t)input_card_index * 4U));
+                            ((uint16_t)configured_input_card_count * 4U));
+        configured_input_card_count++;
     }
 
     if (input_cards_ready != 0U)
     {
         input_card_checksum =
             CRC32_Calculate(input_checksum_data,
-                            (uint32_t)STCAS_INPUT_CARD_COUNT * 4U);
+                            (uint32_t)configured_input_card_count * 4U);
     }
 
     /* ========================================================

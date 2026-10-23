@@ -1,17 +1,15 @@
 #include "input_card.h"
+
 #include <string.h>
+
 #include "datalogging.h"
 
-input_card_data_t input_card_data[INPUT_CARD_MAX_COUNT]; // Raw data received from Input Cards
-field_input_t
-    field_inputs[FIELD_INPUT_COUNT]; // Current value of each field-input key,
-                                     // will eventually store Key + Value
-input_mapping_t input_mapping[FIELD_INPUT_COUNT]; // will eventually tell us
-                                                  // Card + Channel → Key
+input_card_data_t input_card_data[INPUT_CARD_MAX_COUNT];
 
-typedef struct {
-  uint8_t data[8];
-  uint8_t valid;
+typedef struct
+{
+    uint8_t data[8];
+    uint8_t valid;
 } input_card_can_frame_ctx_t;
 
 static input_card_can_frame_ctx_t input_card_can1[INPUT_CARD_MAX_COUNT];
@@ -21,198 +19,232 @@ static uint8_t input_card_dedup_initialized[INPUT_CARD_MAX_COUNT];
 static uint8_t input_card_last_transaction_id[INPUT_CARD_MAX_COUNT];
 static uint8_t input_card_expected_transaction_id[INPUT_CARD_MAX_COUNT];
 static uint8_t input_card_last_payload[INPUT_CARD_MAX_COUNT][6];
+
+static uint8_t field_input_values[STATION_CONFIG_MAX_FIELD_INPUTS];
+static uint8_t field_input_value_valid[STATION_CONFIG_MAX_FIELD_INPUTS];
+static uint16_t active_station_id;
+static uint32_t active_config_revision;
+static uint8_t active_config_seen;
+
 volatile uint32_t input_card_duplicate_count;
 volatile uint32_t input_card_conflict_count;
 
-static uint8_t input_card_get_index(uint32_t can_id) 
+static void input_card_clear_runtime_state(void)
 {
-    if ((can_id >= INPUT_CARD_CAN_ID_BASE) &&
-        (can_id < (INPUT_CARD_CAN_ID_BASE + STCAS_INPUT_CARD_COUNT)))
+    memset(input_card_data, 0, sizeof(input_card_data));
+    memset(input_card_can1, 0, sizeof(input_card_can1));
+    memset(input_card_can2, 0, sizeof(input_card_can2));
+    memset(input_card_snapshot_valid, 0, sizeof(input_card_snapshot_valid));
+    memset(input_card_dedup_initialized, 0,
+           sizeof(input_card_dedup_initialized));
+    memset(input_card_last_transaction_id, 0,
+           sizeof(input_card_last_transaction_id));
+    memset(input_card_expected_transaction_id, 0,
+           sizeof(input_card_expected_transaction_id));
+    memset(input_card_last_payload, 0, sizeof(input_card_last_payload));
+    memset(field_input_values, 0, sizeof(field_input_values));
+    memset(field_input_value_valid, 0, sizeof(field_input_value_valid));
+}
+
+static bool input_card_sync_configuration(void)
+{
+    station_config_header_t header;
+
+    if ((station_config_get_state() != STATION_CONFIG_STATE_VALID) ||
+        (station_config_get_header(&header) != STATION_CONFIG_OK))
     {
-        return (uint8_t)(can_id - INPUT_CARD_CAN_ID_BASE);
+        if (active_config_seen != 0U)
+        {
+            input_card_clear_runtime_state();
+        }
+        active_config_seen = 0U;
+        active_station_id = 0U;
+        active_config_revision = 0U;
+        return false;
     }
 
-    return 0xFFU;
+    if ((active_config_seen == 0U) ||
+        (active_station_id != header.station_id) ||
+        (active_config_revision != header.revision))
+    {
+        input_card_clear_runtime_state();
+        active_station_id = header.station_id;
+        active_config_revision = header.revision;
+        active_config_seen = 1U;
+    }
+
+    return true;
 }
 
-static void field_input_set_value(uint16_t key, uint8_t value) 
+void input_card_init(void)
 {
-    field_inputs[key - 1U].key = key;
-    field_inputs[key - 1U].value = value;
+    input_card_clear_runtime_state();
+    active_station_id = 0U;
+    active_config_revision = 0U;
+    active_config_seen = 0U;
+    input_card_duplicate_count = 0U;
+    input_card_conflict_count = 0U;
 }
-input_mapping_t input_mapping[FIELD_INPUT_COUNT] = 
+
+uint16_t input_card_get_configured_card_bitmap(void)
 {
-    /* Card 1 : Channels 0-31 */
+    uint16_t count;
+    uint16_t index;
+    uint16_t bitmap = 0U;
+    station_config_field_input_t input;
 
-    {1U, 0U, KEY_D01_HECR},
-    {1U, 1U, KEY_D01_DECR},
-    {1U, 2U, KEY_D01_HHECR},
-    {1U, 3U, KEY_ID01_HECR},
-    {1U, 4U, KEY_ID01_DECR},
-    {1U, 5U, KEY_ID01_HHECR},
-    {1U, 6U, KEY_S01_RECR},
-    {1U, 7U, KEY_S01_HECR},
-    {1U, 8U, KEY_S01_DECR},
-    {1U, 9U, KEY_ID02_HECR},
-    {1U, 10U, KEY_ID02_DECR},
-    {1U, 11U, KEY_ID02_HHECR},
-    {1U, 12U, KEY_S02_DECR},
-    {1U, 13U, KEY_S02_HECR},
-    {1U, 14U, KEY_S02_RECR},
-    {1U, 15U, KEY_S04_DECR},
-    {1U, 16U, KEY_S04_HECR},
-    {1U, 17U, KEY_S04_RECR},
-    {1U, 18U, KEY_S06_HECR},
-    {1U, 19U, KEY_S06_RECR},
-    {1U, 20U, KEY_UP_IBS_RECR},
-    {1U, 21U, KEY_UP_IBS_DECR},
-    {1U, 22U, KEY_S05_RECR},
-    {1U, 23U, KEY_S05_HECR},
-    {1U, 24U, KEY_ID11_HECR},
-    {1U, 25U, KEY_ID11_DECR},
-    {1U, 26U, KEY_S11_RECR},
-    {1U, 27U, KEY_S11_DECR},
-    {1U, 28U, KEY_S08_DECR},
-    {1U, 29U, KEY_S08_RECR},
-    {1U, 30U, KEY_S07_RECR},
-    {1U, 31U, KEY_S07_HECR},
+    if ((!input_card_sync_configuration()) ||
+        (station_config_get_field_input_count(&count) != STATION_CONFIG_OK))
+    {
+        return 0U;
+    }
 
-    /* Card 2 : Channels 0-31 */
+    for (index = 0U; index < count; index++)
+    {
+        if (station_config_get_field_input_by_index(index, &input) !=
+            STATION_CONFIG_OK)
+        {
+            return 0U;
+        }
 
-    {2U, 0U, KEY_S09_D11_RECR},
-    {2U, 1U, KEY_S09_D11_HECR},
-    {2U, 2U, KEY_S09_D11_DECR},
-    {2U, 3U, KEY_S09_D11_HHECR},
-    {2U, 4U, KEY_S03_RECR},
-    {2U, 5U, KEY_S03_HECR},
-    {2U, 6U, KEY_S03_DECR},
-    {2U, 7U, KEY_S03_HHECR},
-    {2U, 8U, KEY_D02_HECR},
-    {2U, 9U, KEY_D02_DECR},
-    {2U, 10U, KEY_D02_HHECR},
-    {2U, 11U, KEY_101A},
-    {2U, 12U, KEY_104A},
-    {2U, 13U, KEY_104B},
-    {2U, 14U, KEY_102B},
-    {2U, 15U, KEY_102A},
-    {2U, 16U, KEY_106B},
-    {2U, 17U, KEY_103B},
-    {2U, 18U, KEY_103A},
-    {2U, 19U, KEY_106A},
-    {2U, 20U, KEY_101B},
-    {2U, 21U, KEY_105B},
-    {2U, 22U, KEY_105A},
-    {2U, 23U, KEY_C01T},
-    {2U, 24U, KEY_04AT},
-    {2U, 25U, KEY_04BT},
-    {2U, 26U, KEY_104AT},
-    {2U, 27U, KEY_H01T},
-    {2U, 28U, KEY_101BT},
-    {2U, 29U, KEY_09T},
-    {2U, 30U, KEY_03AT},
-    {2U, 31U, KEY_03BT},
+        bitmap |= (uint16_t)((uint16_t)1U << (input.card_index - 1U));
+    }
 
-    /* Card 3 : Channels 0-28 */
+    return bitmap;
+}
 
-    {3U, 0U, KEY_104BT},
-    {3U, 1U, KEY_102BT},
-    {3U, 2U, KEY_03_07T},
-    {3U, 3U, KEY_08T},
-    {3U, 4U, KEY_H02T},
-    {3U, 5U, KEY_04_06T},
-    {3U, 6U, KEY_102AT},
-    {3U, 7U, KEY_106BT},
-    {3U, 8U, KEY_02BT},
-    {3U, 9U, KEY_02AT},
-    {3U, 10U, KEY_103BT},
-    {3U, 11U, KEY_103AT},
-    {3U, 12U, KEY_01BT},
-    {3U, 13U, KEY_01AT},
-    {3U, 14U, KEY_105T},
-    {3U, 15U, KEY_106AT},
-    {3U, 16U, KEY_101AT},
-    {3U, 17U, KEY_C02T},
-    {3U, 18U, KEY_11AC},
-    {3U, 19U, KEY_SH43},
-    {3U, 20U, KEY_SH41},
-    {3U, 21U, KEY_SH42},
-    {3U, 22U, KEY_C01},
-    {3U, 23U, KEY_C02},
-    {3U, 24U, KEY_RS1},
-    {3U, 25U, KEY_RS2},
-    {3U, 26U, KEY_RS3},
-    {3U, 27U, KEY_LC8},
-    {3U, 28U, KEY_LC9}
-};
-
-void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_source) 
+bool input_card_is_configured(uint8_t card_number)
 {
-    uint8_t index;
+    uint16_t bitmap;
 
-    uint8_t seq_total;
-    uint8_t seq_index;
-    uint8_t transaction_id;
+    if ((card_number == 0U) || (card_number > INPUT_CARD_MAX_COUNT))
+    {
+        return false;
+    }
 
-    uint32_t inputs;
-    uint32_t previous_inputs;
-    uint32_t changed_inputs;
-    uint8_t card;
-    uint8_t channel;
-    uint16_t key;
+    bitmap = input_card_get_configured_card_bitmap();
+    return ((bitmap & ((uint16_t)1U << (card_number - 1U))) != 0U);
+}
 
-    seq_total = ((data[0] >> 4) & 0x0F) | ((data[1] & 0x03) << 4);
+static uint8_t input_card_get_index(uint32_t can_id)
+{
+    uint8_t card_number;
 
-    seq_index = (data[1] >> 2) & 0x3F;
-    transaction_id = data[0] & 0x0FU;
+    if ((can_id < INPUT_CARD_CAN_ID_BASE) ||
+        (can_id >= (INPUT_CARD_CAN_ID_BASE + INPUT_CARD_MAX_COUNT)))
+    {
+        return 0xFFU;
+    }
 
-    if (seq_total != 1U) 
+    card_number = (uint8_t)((can_id - INPUT_CARD_CAN_ID_BASE) + 1U);
+    if (!input_card_is_configured(card_number))
+    {
+        return 0xFFU;
+    }
+
+    return (uint8_t)(card_number - 1U);
+}
+
+static void input_card_update_logical_inputs(
+    uint8_t card_number,
+    uint32_t inputs,
+    uint32_t previous_inputs,
+    uint32_t changed_inputs,
+    uint8_t previous_snapshot_valid)
+{
+    uint16_t count;
+    uint16_t config_index;
+    uint8_t value;
+    uint8_t previous_value;
+    station_config_field_input_t input;
+
+    if (station_config_get_field_input_count(&count) != STATION_CONFIG_OK)
     {
         return;
     }
 
-    if (seq_index != 0U) 
+    for (config_index = 0U; config_index < count; config_index++)
+    {
+        if (station_config_get_field_input_by_index(config_index, &input) !=
+            STATION_CONFIG_OK)
+        {
+            return;
+        }
+
+        if (input.card_index != card_number)
+        {
+            continue;
+        }
+
+        value = (uint8_t)((inputs >> input.channel_index) & 0x01U);
+        previous_value =
+            (uint8_t)((previous_inputs >> input.channel_index) & 0x01U);
+        field_input_values[config_index] = value;
+        field_input_value_valid[config_index] = 1U;
+
+        if ((previous_snapshot_valid != 0U) &&
+            ((changed_inputs &
+              ((uint32_t)1U << input.channel_index)) != 0U))
+        {
+            (void)Log_Event_FieldInput(input.logical_id,
+                                       previous_value,
+                                       value);
+        }
+    }
+}
+
+void input_card_rx_handler(
+    uint32_t can_id,
+    uint8_t *data,
+    can_source_t can_source)
+{
+    uint8_t index;
+    uint8_t seq_total;
+    uint8_t seq_index;
+    uint8_t transaction_id;
+    uint32_t inputs;
+    uint32_t previous_inputs;
+    uint32_t changed_inputs;
+
+    if ((data == NULL) || (!input_card_sync_configuration()))
+    {
+        return;
+    }
+
+    seq_total = (uint8_t)(((data[0] >> 4) & 0x0FU) |
+                          ((data[1] & 0x03U) << 4));
+    seq_index = (uint8_t)((data[1] >> 2) & 0x3FU);
+    transaction_id = data[0] & 0x0FU;
+
+    if ((seq_total != INPUT_CARD_SEQ_TOTAL) ||
+        (seq_index != INPUT_CARD_SEQ_INDEX))
     {
         return;
     }
 
     index = input_card_get_index(can_id);
-
-    if (index == 0xFFU) 
+    if (index == 0xFFU)
     {
         return;
     }
 
-    /* =========================================================
-    * CAN1 / CAN2 REDUNDANCY CHECK
-    * ========================================================= */
-
     if (can_source == CAN_SOURCE_1)
     {
-        /* If the same frame was already received on CAN2,
-        * this is the redundant copy.
-        */
-        if (input_card_can2[index].valid &&
-            memcmp(input_card_can2[index].data, data, 8U) == 0)
+        if ((input_card_can2[index].valid != 0U) &&
+            (memcmp(input_card_can2[index].data, data, 8U) == 0))
         {
             return;
         }
-
-        /* New CAN1 frame - save it */
         memcpy(input_card_can1[index].data, data, 8U);
         input_card_can1[index].valid = 1U;
     }
     else if (can_source == CAN_SOURCE_2)
     {
-        /* If the same frame was already received on CAN1,
-        * this is the redundant copy.
-        */
-        if (input_card_can1[index].valid &&
-            memcmp(input_card_can1[index].data, data, 8U) == 0)
+        if ((input_card_can1[index].valid != 0U) &&
+            (memcmp(input_card_can1[index].data, data, 8U) == 0))
         {
             return;
         }
-
-        /* New CAN2 frame - save it */
         memcpy(input_card_can2[index].data, data, 8U);
         input_card_can2[index].valid = 1U;
     }
@@ -230,7 +262,7 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         if (memcmp(input_card_last_payload[index], &data[2], 6U) == 0)
         {
             input_card_duplicate_count++;
-            send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
+            send_cpu_universal_ack((uint16_t)can_id, 0U, CPU_ACK_OK);
         }
         else
         {
@@ -249,46 +281,162 @@ void input_card_rx_handler(uint32_t can_id, uint8_t *data, can_source_t can_sour
         (uint8_t)((transaction_id + 1U) & 0x0FU);
     memcpy(input_card_last_payload[index], &data[2], 6U);
 
-    inputs =
-        ((uint32_t)data[2]) | ((uint32_t)data[3] << 8) |
-        ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 24);
+    inputs = ((uint32_t)data[2]) |
+             ((uint32_t)data[3] << 8) |
+             ((uint32_t)data[4] << 16) |
+             ((uint32_t)data[5] << 24);
     previous_inputs = input_card_data[index].inputs;
     changed_inputs = previous_inputs ^ inputs;
     input_card_data[index].inputs = inputs;
 
-    send_cpu_universal_ack((uint16_t)can_id, 0, CPU_ACK_OK);
-    
-    card = index + 1U;
+    send_cpu_universal_ack((uint16_t)can_id, 0U, CPU_ACK_OK);
 
-    for (uint16_t i = 0U; i < FIELD_INPUT_COUNT; i++) 
-    {
-        if (input_mapping[i].card != card) 
-        {
-            continue;
-        }
-
-        channel = input_mapping[i].channel;
-        key = input_mapping[i].key;
-
-        /*
-        * Extract the corresponding channel bit.
-        */
-        field_input_set_value(key, (uint8_t)((inputs >> channel) & 0x01U));
-
-        if ((input_card_snapshot_valid[index] != 0U) &&
-            ((changed_inputs & ((uint32_t)1U << channel)) != 0U))
-        {
-            (void)Log_Event_FieldInput(
-                key,
-                (uint8_t)((previous_inputs >> channel) & 0x01U),
-                (uint8_t)((inputs >> channel) & 0x01U));
-        }
-    }
-
+    input_card_update_logical_inputs((uint8_t)(index + 1U),
+                                     inputs,
+                                     previous_inputs,
+                                     changed_inputs,
+                                     input_card_snapshot_valid[index]);
     input_card_snapshot_valid[index] = 1U;
 }
 
-uint8_t field_input_get_value(uint16_t key) 
+bool field_input_try_get_value(uint16_t logical_id, uint8_t *value)
 {
-    return field_inputs[key - 1U].value;
+    uint16_t count;
+    uint16_t index;
+    station_config_field_input_t input;
+
+    if ((value == NULL) || (!input_card_sync_configuration()) ||
+        (station_config_get_field_input_count(&count) != STATION_CONFIG_OK))
+    {
+        return false;
+    }
+
+    for (index = 0U; index < count; index++)
+    {
+        if (station_config_get_field_input_by_index(index, &input) !=
+            STATION_CONFIG_OK)
+        {
+            return false;
+        }
+
+        if (input.logical_id == logical_id)
+        {
+            if (field_input_value_valid[index] == 0U)
+            {
+                return false;
+            }
+            *value = field_input_values[index];
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool field_input_try_get_value_by_index(
+    uint16_t config_index,
+    uint16_t *logical_id,
+    uint8_t *value)
+{
+    station_config_field_input_t input;
+
+    if ((logical_id == NULL) || (value == NULL) ||
+        (!input_card_sync_configuration()) ||
+        (station_config_get_field_input_by_index(config_index, &input) !=
+         STATION_CONFIG_OK) ||
+        (field_input_value_valid[config_index] == 0U))
+    {
+        return false;
+    }
+
+    *logical_id = input.logical_id;
+    *value = field_input_values[config_index];
+    return true;
+}
+
+static bool field_input_decode_state(
+    station_input_encoding_t encoding,
+    uint8_t raw_value,
+    field_input_state_t *state)
+{
+    if (state == NULL)
+    {
+        return false;
+    }
+
+    raw_value = (uint8_t)(raw_value & 0x01U);
+
+    switch (encoding)
+    {
+        case STATION_INPUT_ENCODING_ONE_ASSERTED:
+            *state = (raw_value != 0U) ?
+                FIELD_INPUT_STATE_ASSERTED :
+                FIELD_INPUT_STATE_DEASSERTED;
+            break;
+
+        case STATION_INPUT_ENCODING_ZERO_ASSERTED:
+            *state = (raw_value == 0U) ?
+                FIELD_INPUT_STATE_ASSERTED :
+                FIELD_INPUT_STATE_DEASSERTED;
+            break;
+
+        case STATION_INPUT_ENCODING_ONE_NORMAL:
+            *state = (raw_value != 0U) ?
+                FIELD_INPUT_STATE_NORMAL : FIELD_INPUT_STATE_REVERSE;
+            break;
+
+        case STATION_INPUT_ENCODING_ONE_CLEAR:
+            *state = (raw_value != 0U) ?
+                FIELD_INPUT_STATE_CLEAR : FIELD_INPUT_STATE_OCCUPIED;
+            break;
+
+        case STATION_INPUT_ENCODING_ONE_OFF:
+            *state = (raw_value != 0U) ?
+                FIELD_INPUT_STATE_OFF : FIELD_INPUT_STATE_ON;
+            break;
+
+        default:
+            return false;
+    }
+
+    return true;
+}
+
+bool field_input_try_get_state(
+    uint16_t logical_id,
+    field_input_state_t *state)
+{
+    uint8_t raw_value;
+    station_config_field_input_t input;
+
+    if ((state == NULL) ||
+        (station_config_find_field_input_by_id(logical_id, &input) !=
+         STATION_CONFIG_OK) ||
+        (!field_input_try_get_value(logical_id, &raw_value)))
+    {
+        return false;
+    }
+
+    return field_input_decode_state(input.encoding, raw_value, state);
+}
+
+bool field_input_try_get_state_by_index(
+    uint16_t config_index,
+    uint16_t *logical_id,
+    field_input_state_t *state)
+{
+    uint8_t raw_value;
+    station_config_field_input_t input;
+
+    if ((logical_id == NULL) || (state == NULL) ||
+        (station_config_get_field_input_by_index(config_index, &input) !=
+         STATION_CONFIG_OK) ||
+        (!field_input_try_get_value_by_index(config_index,
+                                              logical_id,
+                                              &raw_value)))
+    {
+        return false;
+    }
+
+    return field_input_decode_state(input.encoding, raw_value, state);
 }
