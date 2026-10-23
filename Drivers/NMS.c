@@ -64,23 +64,23 @@ static void nms_put_u8(nms_writer_t *writer, uint8_t value)
 
 static void nms_put_u16(nms_writer_t *writer, uint16_t value)
 {
-    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
     nms_put_u8(writer, (uint8_t)(value & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
 }
 
 static void nms_put_u24(nms_writer_t *writer, uint32_t value)
 {
-    nms_put_u8(writer, (uint8_t)((value >> 16U) & 0xFFU));
-    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
     nms_put_u8(writer, (uint8_t)(value & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 16U) & 0xFFU));
 }
 
 static void nms_put_u32(nms_writer_t *writer, uint32_t value)
 {
-    nms_put_u8(writer, (uint8_t)((value >> 24U) & 0xFFU));
-    nms_put_u8(writer, (uint8_t)((value >> 16U) & 0xFFU));
-    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
     nms_put_u8(writer, (uint8_t)(value & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 8U) & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 16U) & 0xFFU));
+    nms_put_u8(writer, (uint8_t)((value >> 24U) & 0xFFU));
 }
 
 static void nms_put_bytes(nms_writer_t *writer, const uint8_t *data, uint16_t length)
@@ -667,8 +667,8 @@ static void nms_ack_received_internal(uint8_t ack_status,
 
     if ((has_sequence != 0U) && (transaction->payload_len >= 7U))
     {
-        expected_sequence = (uint16_t)(((uint16_t)transaction->payload[5] << 8U) |
-                                       transaction->payload[6]);
+        expected_sequence = (uint16_t)transaction->payload[5] |
+                            ((uint16_t)transaction->payload[6] << 8U);
         if (expected_sequence != message_sequence)
         {
             return;
@@ -761,8 +761,8 @@ static void nms_accept_annexure_ack(void)
         return;
     }
 
-    message_length = (uint16_t)(((uint16_t)nms_ack_rx.data[3] << 8U) |
-                                nms_ack_rx.data[4]);
+    message_length = (uint16_t)nms_ack_rx.data[3] |
+                     ((uint16_t)nms_ack_rx.data[4] << 8U);
     if (message_length < 15U)
     {
         nms_ack_reassembly_reset();
@@ -776,8 +776,8 @@ static void nms_accept_annexure_ack(void)
         return;
     }
 
-    sequence = (uint16_t)(((uint16_t)nms_ack_rx.data[5] << 8U) |
-                          nms_ack_rx.data[6]);
+    sequence = (uint16_t)nms_ack_rx.data[5] |
+               ((uint16_t)nms_ack_rx.data[6] << 8U);
     nms_ack_action = NMS_PKT_TYPE_ACK;
     nms_ack_status = CPU_ACK_OK;
     nms_ack_sequence = sequence;
@@ -803,8 +803,8 @@ void nms_ack_rx_handle(uint32_t can_id, uint8_t *data)
         return;
     }
 
-    /* Project-2-TMS570 compatible local ACK format. */
-    ack_can_id = (uint16_t)(((uint16_t)data[0] << 8U) | data[1]);
+    /* Local ACK numeric fields use the default little-endian wire order. */
+    ack_can_id = (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
     if (ack_can_id == (uint16_t)can_get_local_tx_id(NMS_TX_CAN_ID))
     {
         nms_ack_action = data[2];

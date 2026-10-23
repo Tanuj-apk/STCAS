@@ -73,6 +73,8 @@
 #include "NMS.h"
 #include "nms_test.h"
 #include "datalogging.h"
+#include "station_config.h"
+#include "station_config_test.h"
 /* USER CODE END */
 
 /** @fn void main(void)
@@ -87,6 +89,8 @@
 extern volatile uint8_t rx_byte;
 uint32_t calculated_firmware_checksum = 0U;
 uint8_t g_device_id = CPU_DEVICE_ID_MIN;
+volatile station_config_result_t station_config_startup_result =
+    STATION_CONFIG_ERR_NOT_ACTIVE;
 void v_1msTasks(void);
 void v_5msTasks(void);
 void v_10msTasks(void);
@@ -260,6 +264,15 @@ void KavachInit(void)
     sciReceive(GPS1_SCI, 1U, (uint8 *)&rx_byte);
     sciReceive(GPS2_SCI, 1U, (uint8 *)&rx_byte);
 
+    station_config_init();
+#if (STATION_CONFIG_USE_NAWANDGI_TEST_CONFIG != 0U)
+    /* TEST ONLY: bypasses NVM but uses the production validator/activator. */
+    station_config_startup_result =
+        station_config_test_activate_nawandgi(NULL);
+#else
+    station_config_startup_result = STATION_CONFIG_ERR_NOT_ACTIVE;
+#endif
+    input_card_init();
     can_manager_init();
     EventLog_Init(DataLogger_CanTx);
     kms_init();
@@ -384,27 +397,57 @@ void v_100msTasks(void)
 void v_1sTasks(void)
 {
     uint8_t event_log_input_image[EVENT_LOG_INPUT_IMAGE_BYTES];
+    uint8_t event_log_input_value;
+    uint8_t event_log_snapshot_complete;
+    uint16_t event_log_input_count;
     uint16_t event_log_input_index;
+    uint16_t event_log_logical_id;
 
     event_log_snapshot_timer++;
     if(event_log_snapshot_timer >= EVENT_LOG_SNAPSHOT_PERIOD_SEC)
     {
         event_log_snapshot_timer = 0U;
         memset(event_log_input_image, 0, sizeof(event_log_input_image));
-        for(event_log_input_index = 0U;
-            event_log_input_index < EVENT_LOG_STATIONARY_INPUT_COUNT;
-            event_log_input_index++)
+        event_log_snapshot_complete = 0U;
+
+        if ((station_config_get_field_input_count(&event_log_input_count) ==
+             STATION_CONFIG_OK) &&
+            (event_log_input_count == EVENT_LOG_STATIONARY_INPUT_COUNT))
         {
-            if(field_input_get_value((uint16_t)(event_log_input_index + 1U)) != 0U)
+            event_log_snapshot_complete = 1U;
+            for(event_log_input_index = 0U;
+                event_log_input_index < event_log_input_count;
+                event_log_input_index++)
             {
-                event_log_input_image[event_log_input_index / 8U] |=
-                    (uint8_t)(1U << (event_log_input_index % 8U));
+                if (!field_input_try_get_value_by_index(
+                        event_log_input_index,
+                        &event_log_logical_id,
+                        &event_log_input_value) ||
+                    (event_log_logical_id == 0U) ||
+                    (event_log_logical_id >
+                     EVENT_LOG_STATIONARY_INPUT_COUNT))
+                {
+                    event_log_snapshot_complete = 0U;
+                    break;
+                }
+
+                if (event_log_input_value != 0U)
+                {
+                    uint16_t event_log_bit_index =
+                        (uint16_t)(event_log_logical_id - 1U);
+
+                    event_log_input_image[event_log_bit_index / 8U] |=
+                        (uint8_t)(1U << (event_log_bit_index % 8U));
+                }
             }
         }
 
-        (void)Log_Event_StationarySnapshot(event_log_input_image,
-                                           smocip_rx.stn_sos_gen != 0U,
-                                           can_manager_get_hb_miss_mask());
+        if (event_log_snapshot_complete != 0U)
+        {
+            (void)Log_Event_StationarySnapshot(event_log_input_image,
+                                               smocip_rx.stn_sos_gen != 0U,
+                                               can_manager_get_hb_miss_mask());
+        }
     }
 
     NMS_Test_1sTask();

@@ -1,0 +1,17 @@
+signal_id,name,recr_input_id,hecr_input_id,decr_input_id,hhecr_input_id,status
+1,D01,,1,2,3,requires_confirmation
+2,ID01,,4,5,6,requires_confirmation
+3,S01,7,8,9,,requires_confirmation
+4,ID02,,10,11,12,requires_confirmation
+5,S02,15,14,13,,requires_confirmation
+6,S04,18,17,16,,requires_confirmation
+7,S06,20,19,,,requires_confirmation
+8,UP_IBS,21,,22,,requires_confirmation
+9,S05,23,24,,,requires_confirmation
+10,ID11,,25,26,,requires_confirmation
+11,S11,27,,28,,requires_confirmation
+12,S08,30,,29,,requires_confirmation
+13,S07,31,32,,,requires_confirmation
+14,S09_D11,33,34,35,36,requires_confirmation
+15,S03,37,38,39,40,requires_confirmation
+16,D02,,41,42,43,requires_confirmation

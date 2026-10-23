@@ -1,0 +1,7 @@
+point_id,name,end_a_input_id,end_b_input_id,status
+101,101,44,53,requires_confirmation
+102,102,48,47,requires_confirmation
+103,103,51,50,requires_confirmation
+104,104,45,46,requires_confirmation
+105,105,55,54,requires_confirmation
+106,106,52,49,requires_confirmation

@@ -42,6 +42,13 @@
 #define NMS_ACK_MAX_RETRIES              3U
 #define NMS_ACK_REASSEMBLY_LEN           64U
 
+/* NMS application-wire convention:
+ * - Multi-byte numeric fields are little-endian unless a field specification
+ *   explicitly requires another order.
+ * - Raw embedded packet byte arrays are copied without conversion.
+ * - The Ethernet CRC is serialized separately by the gateway in the
+ *   SRS-specified most-significant-byte-first order. */
+
 typedef struct
 {
     uint16_t message_sequence;
